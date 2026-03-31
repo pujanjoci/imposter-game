@@ -139,7 +139,7 @@ export default function HomePage() {
         style={{
           position: "relative",
           zIndex: 1,
-          minHeight: "100vh",
+          minHeight: "100dvh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

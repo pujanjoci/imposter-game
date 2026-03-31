@@ -16,6 +16,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [countdownActive, setCountdownActive] = useState(false);
+  const [waitingToPass, setWaitingToPass] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const me = room.players.find((p) => p.id === playerId);
@@ -52,7 +53,8 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
             setCountdownActive(false);
             // Auto advance based on mode
             if (isSingleDevice) {
-              handleSingleDeviceNext();
+              setWaitingToPass(true);
+              setShowRole(false);
             } else {
               handleReady();
             }
@@ -70,6 +72,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
   // Reset for each turn change in single-device mode
   useEffect(() => {
     setShowRole(false);
+    setWaitingToPass(false);
     setCountdown(COUNTDOWN_SECONDS);
     setCountdownActive(false);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -108,6 +111,27 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
     const currentPlayer = room.players[currentTurn];
     const isLastPlayer = currentTurn === totalPlayers - 1;
     const canAdvance = showRole && !countdownActive;
+
+    if (waitingToPass) {
+      const nextPlayer = isLastPlayer ? null : room.players[currentTurn + 1];
+      return (
+        <div className="card anim-scale-in" style={{ maxWidth: 460, margin: "0 auto", textAlign: "center", padding: "3rem 2rem" }}>
+          <h2 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: "1rem", color: "var(--text-1)" }}>
+            {isLastPlayer ? "All Roles Revealed!" : `Pass to ${nextPlayer?.name}`}
+          </h2>
+          <p style={{ color: "var(--text-3)", marginBottom: "2.5rem", fontSize: "1rem" }}>
+            {isLastPlayer ? "Everyone should know their role. Ready to figure out the imposter?" : `Make sure ${nextPlayer?.name} is holding the device before continuing.`}
+          </p>
+          <button
+            className="btn btn-primary btn-full btn-lg"
+            onClick={handleSingleDeviceNext}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="spinner" /> : isLastPlayer ? "Start Game" : `I am ${nextPlayer?.name}`}
+          </button>
+        </div>
+      );
+    }
 
     return (
       <div className="card anim-scale-in" style={{ maxWidth: 460, margin: "0 auto", textAlign: "center" }}>
