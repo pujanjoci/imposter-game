@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { RoomView } from "@/lib/types";
+import { isLocalRoom } from "@/lib/api-client";
+import { getLocalRoomView } from "@/lib/local-game-engine";
 
 interface UseRoomReturn {
   room: RoomView | null;
@@ -39,6 +41,38 @@ export function useRoom(code: string): UseRoomReturn {
   const connect = useCallback(async () => {
     if (!playerId) return;
     if (!mountedRef.current) return;
+
+    if (isLocalRoom(code)) {
+      setConnected(true);
+      setError("");
+      retriesRef.current = 0;
+
+      const updateLocalRoom = () => {
+        if (!mountedRef.current) return;
+        const localRoom = getLocalRoomView(code, playerId);
+        if (localRoom) {
+          setRoom(localRoom);
+        } else {
+          setError("Local room not found.");
+        }
+      };
+
+      updateLocalRoom();
+
+      const handler = (e: Event) => {
+        const customEvent = e as CustomEvent;
+        if (customEvent.detail?.code === code) {
+          updateLocalRoom();
+        }
+      };
+
+      window.addEventListener("local-room-updated", handler);
+
+      esRef.current = {
+        close: () => window.removeEventListener("local-room-updated", handler),
+      } as any;
+      return;
+    }
 
     // Hit retry limit — stop trying
     if (retriesRef.current >= MAX_RETRIES) {

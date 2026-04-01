@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createSingleDeviceRoomClient } from "@/lib/api-client";
 import {
   UserSearch, Home, Link2, ArrowRight, Loader2,
   Smartphone, Users, Plus, Trash2, ChevronRight,
@@ -84,21 +85,12 @@ export default function HomePage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/rooms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ singleDevice: true, playerNames: names }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || "Failed to create room"); return; }
-      // Store all player IDs in localStorage under the room code
-      // The active device uses playerIds[0] as the "device owner"
+      const data = await createSingleDeviceRoomClient(names);
       localStorage.setItem(`player_${data.code}`, data.playerIds[0]);
-      // Store all IDs so the RoleReveal component can track each player
       localStorage.setItem(`sdPlayers_${data.code}`, JSON.stringify(data.playerIds));
       router.push(`/room/${data.code}`);
     } catch {
-      setError("Network error. Try again.");
+      setError("Failed to create room.");
     } finally {
       setLoading(false);
     }

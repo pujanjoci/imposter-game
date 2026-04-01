@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { RoomView } from "@/lib/types";
 import {
   Send, FileText, Loader2, Sparkles, MessageSquare,
-  ChevronRight, EyeOff, Eye, Tag,
+  ChevronRight, EyeOff, Eye, Tag, Users
 } from "lucide-react";
+import { submitClueClient, advanceToInterRoundClient } from "@/lib/api-client";
 
 export default function CluePhase({ room, playerId }: { room: RoomView; playerId: string }) {
   const [clue, setClue] = useState("");
@@ -54,15 +55,10 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!clue.trim() || loading) return;
+    if (!clue.trim() || loading || !me) return;
     setLoading(true);
     try {
-      await fetch(`/api/rooms/${room.code}/clue`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: me?.id, clue: clue.trim() }),
-      });
-      // In SD mode, reset for next player (SSE will update room.players)
+      await submitClueClient(room.code, me.id, clue.trim());
       if (isSingleDevice) {
         setClue("");
         setShowHint(false);
@@ -106,147 +102,44 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
     );
   }
 
-  // ── SINGLE DEVICE: All submitted, waiting for phase transition ────────────
-  if (isSingleDevice && playersWithoutClue.length === 0) {
+  // ── SINGLE DEVICE: Discussion Time ────────────────────────────────────────
+  if (isSingleDevice) {
     return (
       <div className="card-elevated anim-scale-in" style={{ maxWidth: 540, margin: "0 auto", padding: "var(--card-py) var(--card-px)", textAlign: "center" }}>
         <div style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           width: 56, height: 56, borderRadius: "50%",
-          background: "var(--success-dim)", color: "var(--success)",
-          marginBottom: "1rem", boxShadow: "0 0 24px var(--success-glow)",
+          background: "var(--primary-dim)", color: "var(--primary)",
+          marginBottom: "1rem", boxShadow: "0 0 24px var(--primary-glow)",
         }}>
-          <MessageSquare size={28} />
+          <Users size={28} />
         </div>
         <h3 style={{ fontSize: "1.4rem", fontWeight: 800, color: "var(--text-1)", marginBottom: "0.5rem" }}>
-          All Clues Submitted!
+          Discussion Time!
         </h3>
-        <p style={{ color: "var(--text-3)", fontSize: "0.9rem" }}>
-          Moving to the imposter&apos;s guess phase…
+        <p style={{ color: "var(--text-3)", fontSize: "0.95rem", marginBottom: "2rem" }}>
+          Go around the group and say your one-word clue out loud! 
+          <br /><br />
+          Once everyone has shared their clue, click below to advance to the Imposter's turn.
         </p>
-        <Loader2 size={20} className="spinner" style={{ margin: "1.5rem auto 0", color: "var(--primary)" }} />
-      </div>
-    );
-  }
-
-  // ── SINGLE DEVICE: Pass-the-phone clue entry ──────────────────────────────
-  if (isSingleDevice && sdCurrentPlayer) {
-    const submittedCount = room.players.filter(p => p.clue).length;
-    const totalPlayers = room.players.length;
-
-    return (
-      <div className="card-elevated anim-scale-in" style={{ maxWidth: 540, margin: "0 auto", padding: "var(--card-py) var(--card-px)" }}>
-        {/* Progress */}
-        <div style={{ marginBottom: "1.5rem" }}>
-          <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: "0.75rem" }}>
-            {room.players.map((p, i) => (
-              <div key={i} style={{
-                width: p.clue ? 20 : 8,
-                height: 8,
-                borderRadius: 99,
-                background: p.clue ? "var(--success)" : p.id === sdCurrentPlayer.id ? "var(--primary)" : "var(--border)",
-                transition: "all 0.3s",
-              }} />
-            ))}
-          </div>
-          <p style={{ textAlign: "center", fontSize: "0.8rem", color: "var(--text-3)", fontWeight: 600 }}>
-            Clue {submittedCount + 1} of {totalPlayers}
-          </p>
-        </div>
-
-        {/* Player header */}
-        <div style={{
-          background: showImposterHint ? "rgba(244,63,94,0.08)" : "rgba(139,92,246,0.08)",
-          border: `1px solid ${showImposterHint ? "rgba(244,63,94,0.2)" : "rgba(139,92,246,0.2)"}`,
-          borderRadius: "var(--radius-lg)",
-          padding: "1rem 1.25rem",
-          marginBottom: "1.5rem",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-        }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: "50%",
-            background: `hsl(${sdCurrentPlayer.name.charCodeAt(0) * 13 % 360}, 60%, 40%)`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "1rem", fontWeight: 900, color: "#fff", flexShrink: 0,
-          }}>
-            {sdCurrentPlayer.name[0].toUpperCase()}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: showImposterHint ? "var(--danger)" : "var(--primary)", fontWeight: 700, marginBottom: "0.15rem" }}>
-              {sdCurrentPlayer.name}&apos;s Turn
-            </div>
-            {showWord && (
-              <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text-1)" }}>
-                Word: <span style={{ color: "var(--primary)" }}>{room.word}</span>
-                {room.wordCategory && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-3)", fontWeight: 500, marginLeft: "0.5rem" }}>
-                    ({room.wordCategory})
-                  </span>
-                )}
-              </div>
-            )}
-            {showImposterHint && (
-              <div>
-                <div style={{ fontSize: "0.85rem", color: "var(--danger)", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                  <Tag size={12} /> {room.wordCategory}
-                </div>
-                {!showHint ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowHint(true)}
-                    style={{ background: "none", border: "none", color: "var(--danger)", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", padding: 0, marginTop: "0.15rem" }}
-                  >
-                    <Eye size={13} /> Reveal your hint
-                  </button>
-                ) : (
-                  <div style={{ fontSize: "0.85rem", color: "var(--text-2)", fontWeight: 500, display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                    <EyeOff size={13} onClick={() => setShowHint(false)} style={{ cursor: "pointer" }} />
-                    {room.imposterHint}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Clue input */}
-        <form onSubmit={handleSubmit}>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--text-2)" }}>
-            Enter your one-word clue:
-          </label>
-          <div style={{ display: "flex", gap: "0.75rem", flexDirection: "column" }}>
-            <input
-              type="text"
-              value={clue}
-              onChange={(e) => setClue(e.target.value.replace(/\s/g, ""))}
-              placeholder="e.g. Delicious"
-              className="input input-lg"
-              autoFocus
-              maxLength={20}
-              required
-              style={{ fontSize: "1rem", touchAction: "manipulation" }}
-            />
-            {clue.trim().includes(" ") && (
-              <p className="error-msg anim-fade-in">Only one word allowed!</p>
-            )}
-            <button
-              type="submit"
-              disabled={loading || !clue.trim() || clue.trim().includes(" ")}
-              className="btn btn-primary btn-lg btn-full"
-              style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-            >
-              {loading ? (
-                <><Loader2 size={20} className="spinner" /> Submitting…</>
-              ) : submittedCount + 1 === totalPlayers ? (
-                <><Send size={20} /> Submit Final Clue</>
-              ) : (
-                <><ChevronRight size={20} /> Submit & Pass to {room.players[submittedCount + 1]?.name}</>
-              )}
-            </button>
-          </div>
-        </form>
+        <button
+          onClick={async () => {
+             setLoading(true);
+             try {
+               await advanceToInterRoundClient(room.code);
+             } finally {
+               setLoading(false);
+             }
+          }}
+          disabled={loading}
+          className="btn btn-primary btn-lg btn-full"
+        >
+           {loading ? (
+             <><Loader2 size={20} className="spinner" /> Advancing…</>
+           ) : (
+             <><ChevronRight size={20} /> Advance to Imposter Guess</>
+           )}
+        </button>
       </div>
     );
   }

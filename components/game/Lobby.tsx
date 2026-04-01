@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RoomView } from "@/lib/types";
+import { startGameClient } from "@/lib/api-client";
 import { Copy, Check, Users, Shield, Crown, Play, Loader2, Link } from "lucide-react";
 
 export default function Lobby({ room, playerId }: { room: RoomView; playerId: string }) {
@@ -23,11 +24,7 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
     if (!isHost || !canStart) return;
     setLoading(true);
     try {
-      await fetch(`/api/rooms/${room.code}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId }),
-      });
+      await startGameClient(room.code, playerId);
     } finally {
       setLoading(false);
     }
@@ -36,7 +33,8 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
   return (
     <div className="card-elevated anim-scale-in" style={{ maxWidth: 540, margin: "0 auto", padding: "var(--card-py) var(--card-px)" }}>
       {/* ── Status ── */}
-      <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+      {!room.singleDeviceMode && (
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
         <div style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           width: 56, height: 56, borderRadius: "50%",
@@ -57,9 +55,11 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
           {room.players.length} / 10 players joined
         </p>
       </div>
+      )}
 
       {/* ── Room Code ── */}
-      <div style={{
+      {!room.singleDeviceMode && (
+        <div style={{
         background: "rgba(11,15,26,0.6)", border: "1px solid var(--border)",
         borderRadius: "var(--radius-lg)", padding: "1.25rem",
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -87,6 +87,7 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
           <span style={{ fontSize: "0.8rem", fontWeight: 600 }}>{copied ? "Copied!" : "Copy Code"}</span>
         </button>
       </div>
+      )}
 
       {/* ── Player List ── */}
       <div style={{ marginBottom: "2rem" }}>

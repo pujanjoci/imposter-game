@@ -6,6 +6,7 @@ import {
   Loader2, Target, SkipForward, Sparkles, MessageSquare,
   Eye, EyeOff,
 } from "lucide-react";
+import { submitGuessClient, skipGuessClient } from "@/lib/api-client";
 
 export default function InterRound({
   room,
@@ -45,11 +46,7 @@ export default function InterRound({
     if (!guess.trim() || loading) return;
     setLoading("guess");
     try {
-      await fetch(`/api/rooms/${room.code}/guess`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: activePlayerId, guess: guess.trim() }),
-      });
+      await submitGuessClient(room.code, activePlayerId, guess.trim());
     } finally {
       setLoading(null);
     }
@@ -60,11 +57,7 @@ export default function InterRound({
     if (loading) return;
     setLoading("skip");
     try {
-      await fetch(`/api/rooms/${room.code}/skip-guess`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: activePlayerId }),
-      });
+      await skipGuessClient(room.code, activePlayerId);
     } finally {
       setLoading(null);
     }
@@ -202,164 +195,173 @@ export default function InterRound({
               marginBottom: "0.25rem",
             }}
           >
-            {isSingleDevice && imposterPlayer
-              ? `${imposterPlayer.name}'s Chance`
+            {isSingleDevice
+              ? "Imposter Decision"
               : "Your Turn to Guess"}
           </h3>
           <p style={{ color: "var(--text-2)", fontSize: "0.9rem", fontWeight: 500 }}>
-            Guess the secret word now to win instantly — or skip to the {isSingleDevice ? "reveal" : "vote"}.
+            {!isSingleDevice && "Guess the secret word now to win instantly — or skip to the vote."}
+            {isSingleDevice && "Ready to see if the group caught you? Continue to the vote."}
           </p>
         </div>
       </div>
 
       {/* All clues for the imposter to review */}
-      <h3
-        style={{
-          fontSize: "0.8rem",
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          color: "var(--text-3)",
-          fontWeight: 700,
-          marginBottom: "0.75rem",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-        }}
-      >
-        <MessageSquare size={14} /> Crewmate Clues
-      </h3>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.5rem",
-          marginBottom: "1.75rem",
-        }}
-      >
-        {room.players
-          .filter((p) => p.id !== activePlayerId)
-          .map((p) => (
-            <div
-              key={p.id}
-              style={{
-                background: "var(--bg-card)",
-                border: "1px solid var(--border)",
-                padding: "0.65rem 1rem",
-                borderRadius: "var(--radius-md)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span style={{ fontWeight: 600, color: "var(--text-2)", fontSize: "0.9rem" }}>
-                {p.name}
-              </span>
-              <span style={{ fontWeight: 700, color: "var(--cyan, #06b6d4)", fontSize: "1rem" }}>
-                {p.clue ?? "—"}
-              </span>
-            </div>
-          ))}
-        {/* Imposter's own clue */}
-        {room.players.find((p) => p.id === activePlayerId)?.clue && (
+      {!isSingleDevice && (
+        <>
+          <h3
+            style={{
+              fontSize: "0.8rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              color: "var(--text-3)",
+              fontWeight: 700,
+              marginBottom: "0.75rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            <MessageSquare size={14} /> Crewmate Clues
+          </h3>
           <div
             style={{
-              background: "rgba(244,63,94,0.05)",
-              border: "1px solid rgba(244,63,94,0.15)",
-              padding: "0.65rem 1rem",
-              borderRadius: "var(--radius-md)",
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
+              flexDirection: "column",
+              gap: "0.5rem",
+              marginBottom: "1.75rem",
             }}
           >
-            <span style={{ fontWeight: 600, color: "var(--danger)", fontSize: "0.9rem" }}>
-              {isSingleDevice && imposterPlayer ? imposterPlayer.name : "You"}
-            </span>
-            <span style={{ fontWeight: 700, color: "var(--danger)", fontSize: "1rem" }}>
-              {room.players.find((p) => p.id === activePlayerId)?.clue}
-            </span>
+            {room.players
+              .filter((p) => p.id !== activePlayerId)
+              .map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    padding: "0.65rem 1rem",
+                    borderRadius: "var(--radius-md)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: "var(--text-2)", fontSize: "0.9rem" }}>
+                    {p.name}
+                  </span>
+                  <span style={{ fontWeight: 700, color: "var(--cyan, #06b6d4)", fontSize: "1rem" }}>
+                    {p.clue ?? "—"}
+                  </span>
+                </div>
+              ))}
+            {/* Imposter's own clue */}
+            {room.players.find((p) => p.id === activePlayerId)?.clue && (
+              <div
+                style={{
+                  background: "rgba(244,63,94,0.05)",
+                  border: "1px solid rgba(244,63,94,0.15)",
+                  padding: "0.65rem 1rem",
+                  borderRadius: "var(--radius-md)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontWeight: 600, color: "var(--danger)", fontSize: "0.9rem" }}>
+                  {isSingleDevice && imposterPlayer ? imposterPlayer.name : "You"}
+                </span>
+                <span style={{ fontWeight: 700, color: "var(--danger)", fontSize: "1rem" }}>
+                  {room.players.find((p) => p.id === activePlayerId)?.clue}
+                </span>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* Guess form */}
-      <form onSubmit={handleGuess} style={{ marginBottom: "1rem" }}>
-        <label
-          style={{
-            display: "block",
-            marginBottom: "0.5rem",
-            fontSize: "0.9rem",
-            fontWeight: 600,
-            color: "var(--text-2)",
-          }}
-        >
-          What is the secret word?
-        </label>
-        <div style={{ position: "relative", marginBottom: "0.75rem" }}>
-          <input
-            type={showGuess ? "text" : "password"}
-            value={guess}
-            onChange={(e) => setGuess(e.target.value)}
-            placeholder="Type your guess…"
-            className="input input-lg"
-            autoComplete="off"
+      {/* Guess form - Hidden in single device mode */}
+      {!isSingleDevice && (
+        <form onSubmit={handleGuess} style={{ marginBottom: "1rem" }}>
+          <label
             style={{
-              paddingRight: "3rem",
-              touchAction: "manipulation",
-              fontSize: "1rem",
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => setShowGuess((v) => !v)}
-            style={{
-              position: "absolute",
-              right: "0.75rem",
-              top: "50%",
-              transform: "translateY(-50%)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--text-3)",
-              touchAction: "manipulation",
-              padding: "0.25rem",
+              display: "block",
+              marginBottom: "0.5rem",
+              fontSize: "0.9rem",
+              fontWeight: 600,
+              color: "var(--text-2)",
             }}
           >
-            {showGuess ? <EyeOff size={18} /> : <Eye size={18} />}
+            What is the secret word?
+          </label>
+          <div style={{ position: "relative", marginBottom: "0.75rem" }}>
+            <input
+              type={showGuess ? "text" : "password"}
+              value={guess}
+              onChange={(e) => setGuess(e.target.value)}
+              placeholder="Type your guess…"
+              className="input input-lg"
+              autoComplete="off"
+              style={{
+                paddingRight: "3rem",
+                touchAction: "manipulation",
+                fontSize: "1rem",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowGuess((v) => !v)}
+              style={{
+                position: "absolute",
+                right: "0.75rem",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--text-3)",
+                touchAction: "manipulation",
+                padding: "0.25rem",
+              }}
+            >
+              {showGuess ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          <button
+            type="submit"
+            disabled={!guess.trim() || !!loading}
+            className="btn btn-danger btn-lg btn-full"
+            style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+          >
+            {loading === "guess" ? (
+              <><Loader2 size={18} className="spinner" /> Guessing…</>
+            ) : (
+              <><Target size={18} /> Submit Guess & Win</>
+            )}
           </button>
-        </div>
-        <button
-          type="submit"
-          disabled={!guess.trim() || !!loading}
-          className="btn btn-danger btn-lg btn-full"
-          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-        >
-          {loading === "guess" ? (
-            <><Loader2 size={18} className="spinner" /> Guessing…</>
-          ) : (
-            <><Target size={18} /> Submit Guess & Win</>
-          )}
-        </button>
-      </form>
+        </form>
+      )}
 
       {/* Divider */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          margin: "1.25rem 0",
-          color: "var(--text-3)",
-          fontSize: "0.8rem",
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-        }}
-      >
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        or
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-      </div>
+      {!isSingleDevice && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            margin: "1.25rem 0",
+            color: "var(--text-3)",
+            fontSize: "0.8rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          or
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
+      )}
 
       {/* Skip button */}
       <button
@@ -370,9 +372,9 @@ export default function InterRound({
         style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
       >
         {loading === "skip" ? (
-          <><Loader2 size={18} className="spinner" /> Skipping…</>
+          <><Loader2 size={18} className="spinner" /> {isSingleDevice ? "Continuing…" : "Skipping…"}</>
         ) : (
-          <><SkipForward size={18} /> Skip — Go to {isSingleDevice ? "Reveal" : "Vote"}</>
+          <><SkipForward size={18} /> {isSingleDevice ? "Continue to Vote" : "Skip — Go to Vote"}</>
         )}
       </button>
     </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import { Loader2, UserX, Skull, SkipForward } from "lucide-react";
+import { submitVoteClient } from "@/lib/api-client";
 
 export default function VotePhase({
   room,
@@ -26,11 +27,7 @@ export default function VotePhase({
     setSelectedId(targetId);
     setLoading(true);
     try {
-      await fetch(`/api/rooms/${room.code}/vote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voterId: playerId, targetId }),
-      });
+      await submitVoteClient(room.code, playerId, targetId);
     } finally {
       setLoading(false);
     }

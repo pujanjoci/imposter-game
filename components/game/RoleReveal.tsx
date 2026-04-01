@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { RoomView } from "@/lib/types";
+import { advanceSingleDeviceTurnClient } from "@/lib/api-client";
 import { Eye, EyeOff, Loader2, Sparkles, UserX, ShieldCheck, Tag, ChevronRight, Timer } from "lucide-react";
 
 interface RoleRevealProps {
@@ -94,11 +95,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
   async function handleSingleDeviceNext() {
     setLoading(true);
     try {
-      await fetch(`/api/rooms/${room.code}/single-ready`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId }),
-      });
+      await advanceSingleDeviceTurnClient(room.code, playerId);
     } finally {
       setLoading(false);
     }

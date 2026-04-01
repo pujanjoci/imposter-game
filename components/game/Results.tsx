@@ -7,6 +7,7 @@ import {
   CheckCircle2, XCircle, SkipForward, Users, Eye, Tag,
   BookOpen,
 } from "lucide-react";
+import { nextRoundClient } from "@/lib/api-client";
 
 interface ResultsProps {
   room: RoomView;
@@ -28,15 +29,9 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
   async function handleNextRound() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/rooms/${room.code}/next-round`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        console.error("[next-round]", data.error);
-      }
+      await nextRoundClient(room.code, playerId);
+    } catch (err: any) {
+      console.error("[next-round]", err.message);
     } finally {
       setLoading(false);
     }
@@ -105,8 +100,8 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               )}
             </div>
 
-            {/* Clues summary */}
-            {room.submissions.length > 0 && (
+            {/* Clues summary - Not shown in SD mode since clues are spoken */}
+            {!room.singleDeviceMode && room.submissions.length > 0 && (
               <div style={{ marginBottom: "2rem", textAlign: "left" }}>
                 <h3 style={{
                   fontSize: "0.8rem",
@@ -261,8 +256,8 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               )}
             </div>
 
-            {/* Clue submissions in reveal mode */}
-            {room.submissions.length > 0 && (
+            {/* Clue submissions in reveal mode - Not shown in SD mode */}
+            {!room.singleDeviceMode && room.submissions.length > 0 && (
               <div style={{ marginBottom: "1.5rem", textAlign: "left" }}>
                 <h3 style={{
                   fontSize: "0.8rem",
