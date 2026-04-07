@@ -13,43 +13,17 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
   const [loading, setLoading] = useState(false);
   const [showHint, setShowHint] = useState(false);
 
-  // Single Device: tracks which player is currently entering a clue
-  // We cycle through players who haven't submitted yet
-  const [sdActiveIndex, setSdActiveIndex] = useState<number>(0);
-
   const isSingleDevice = room.singleDeviceMode;
 
-  // Determine who is entering a clue in SD mode
-  const playersWithoutClue = room.players.filter((p) => !p.clue);
-  const sdCurrentPlayer = isSingleDevice ? playersWithoutClue[0] : null;
-
-  // Reset clue when SD active player changes
-  useEffect(() => {
-    if (isSingleDevice) {
-      setClue("");
-      setShowHint(false);
-    }
-  }, [sdCurrentPlayer?.id, isSingleDevice]);
-
-  const me = isSingleDevice ? sdCurrentPlayer : room.players.find((p) => p.id === playerId);
-  if (!me) return null;
-
-  const isImposter = me.id === room.players.find(
-    (p) => isSingleDevice
-      ? false // In SD mode we can't know imposter until results
-      : p.id === playerId
-  )?.id
-    ? false
-    : room.imposterHint !== null && me.clue === null
-      ? false // can't determine in SD
-      : false;
+  const me = room.players.find((p) => p.id === playerId);
+  if (!me && !isSingleDevice) return null;
 
   // Simpler: just check submissions empty status
-  const hasSubmitted = !!me.clue;
+  const hasSubmitted = me ? !!me.clue : false;
 
   // For the word/hint display in SD mode, we need to show based on role
   // which is embedded in the player object
-  const activePlayerRole = me.role;
+  const activePlayerRole = me?.role;
   const showWord = activePlayerRole !== "imposter"; // imposter doesn't see the word
   const showImposterHint = activePlayerRole === "imposter";
 
@@ -83,7 +57,7 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
           </div>
           <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-1)" }}>Clue Submitted!</h3>
           <p style={{ color: "var(--text-2)", marginTop: "0.25rem" }}>
-            Your clue: <strong style={{ color: "var(--primary)", fontWeight: 800 }}>"{me.clue}"</strong>
+            Your clue: <strong style={{ color: "var(--primary)", fontWeight: 800 }}>"{me?.clue}"</strong>
           </p>
           <div style={{ marginTop: "2rem", padding: "1.5rem", background: "var(--bg-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", fontSize: "0.85rem", fontWeight: 600 }}>

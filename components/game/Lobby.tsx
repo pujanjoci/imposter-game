@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import { startGameClient } from "@/lib/api-client";
+import { PlayerBadge } from "@/components/ui/PlayerBadge";
 import { Copy, Check, Users, Shield, Crown, Play, Loader2, Link } from "lucide-react";
 
 export default function Lobby({ room, playerId }: { room: RoomView; playerId: string }) {
@@ -96,31 +97,11 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
         </h3>
         <div style={{ display: "grid", gap: "0.5rem" }}>
           {room.players.map((p) => (
-            <div key={p.id} className="anim-fade-in" style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "0.75rem 1rem", borderRadius: "calc(var(--radius-md) - 2px)",
-              background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%",
-                  background: `hsl(${p.name.charCodeAt(0) * 13 % 360}, 60%, 40%)`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "0.8rem", fontWeight: 800, color: "#fff",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                }}>
-                  {p.name[0].toUpperCase()}
-                </div>
-                <span style={{ fontWeight: 600, color: p.id === playerId ? "var(--primary)" : "var(--text-1)", fontSize: "0.95rem" }}>
-                  {p.name} {p.id === playerId && <span style={{ color: "var(--text-3)", fontSize: "0.8rem", fontWeight: 500 }}>(You)</span>}
-                </span>
-              </div>
-              {p.isHost && (
-                <div className="badge badge-amber" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Crown size={12} /> Host
-                </div>
-              )}
-            </div>
+            <PlayerBadge 
+              key={p.id} 
+              player={p} 
+              highlight={p.id === playerId} 
+            />
           ))}
 
           {/* Empty slots for visual cue */}

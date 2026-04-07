@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   title: "Imposter Game — Who's the Fake?",
   description:
     "A real-time multiplayer word-guessing party game. Give clues, spot the Imposter, and vote them out!",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -9,13 +9,15 @@ export type GamePhase =
   | "vote_phase"
   | "results";
 
+export type PlayerRole = "crewmate" | "imposter";
+
 export interface Player {
   id: string;
   name: string;
   isHost: boolean;
   isReady: boolean;
   // Per-round fields — reset each round
-  role?: "crewmate" | "imposter";
+  role?: PlayerRole;
   clue?: string | null;
   vote?: string | null;
   skippedVote?: boolean;
@@ -78,4 +80,13 @@ export interface RoomView {
   singleDeviceMode: boolean;
   singleDeviceTurn: number;
   updatedAt: number;
+}
+
+// ─── Shared UI Component Props ─────────────────────────────────────────────
+
+export interface PlayerBadgeProps {
+  player: Player;
+  highlight?: boolean;
+  showRole?: boolean;
+  isCurrentTurn?: boolean;
 }

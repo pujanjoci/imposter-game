@@ -3,26 +3,20 @@
 import { useState, useEffect, useRef } from "react";
 import { RoomView } from "@/lib/types";
 import { advanceSingleDeviceTurnClient } from "@/lib/api-client";
-import { Eye, EyeOff, Loader2, Sparkles, UserX, ShieldCheck, Tag, ChevronRight, Timer } from "lucide-react";
+import { Eye, EyeOff, Loader2, Sparkles, UserX, ShieldCheck, Tag, ChevronRight } from "lucide-react";
+import { PlayerBadge } from "@/components/ui/PlayerBadge";
 
 interface RoleRevealProps {
   room: RoomView;
   playerId: string;
 }
 
-const COUNTDOWN_SECONDS = 2; // seconds to show role before auto-advancing
-
 export default function RoleReveal({ room, playerId }: RoleRevealProps) {
   const [showRole, setShowRole] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
-  const [countdownActive, setCountdownActive] = useState(false);
   const [waitingToPass, setWaitingToPass] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const me = room.players.find((p) => p.id === playerId);
-  if (!me) return null;
-
   const isSingleDevice = room.singleDeviceMode;
 
   // In single-device mode, the active player being shown role
@@ -35,48 +29,26 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
     ? (activeSdPlayer?.id === room.players.find(p => p.id === room.players[room.singleDeviceTurn]?.id)?.id
         ? activeSdPlayer?.role
         : undefined)
-    : me.role;
+    : me?.role;
 
   // In single-device mode, the role shown is for the active turn player
-  const displayRole = isSingleDevice ? activeSdPlayer?.role : me.role;
+  const displayRole = isSingleDevice ? activeSdPlayer?.role : me?.role;
   const displayWord = room.word; // null for imposter (handled server-side)
   const displayHint = room.imposterHint; // only sent to imposter
 
-  // Start countdown when role is revealed, auto-advance on zero
-  useEffect(() => {
-    if (showRole) {
-      setCountdown(COUNTDOWN_SECONDS);
-      setCountdownActive(true);
-      timerRef.current = setInterval(() => {
-        setCountdown((c) => {
-          if (c <= 1) {
-            clearInterval(timerRef.current!);
-            setCountdownActive(false);
-            // Auto advance based on mode
-            if (isSingleDevice) {
-              setWaitingToPass(true);
-              setShowRole(false);
-            } else {
-              handleReady();
-            }
-            return 0;
-          }
-          return c - 1;
-        });
-      }, 1000);
+  function handleHideAndPass() {
+    if (isSingleDevice) {
+      setWaitingToPass(true);
+      setShowRole(false);
+    } else {
+      handleReady();
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [showRole, isSingleDevice]);
+  }
 
   // Reset for each turn change in single-device mode
   useEffect(() => {
     setShowRole(false);
     setWaitingToPass(false);
-    setCountdown(COUNTDOWN_SECONDS);
-    setCountdownActive(false);
-    if (timerRef.current) clearInterval(timerRef.current);
   }, [room.singleDeviceTurn]);
 
   async function handleReady() {
@@ -101,13 +73,14 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
     }
   }
 
-  // ── Single Device Mode ──────────────────────────────────────────────────
+  // Ensure 'me' is defined for multiplayer before rendering
+  if (!me && !isSingleDevice) return null;
+
   if (isSingleDevice) {
     const totalPlayers = room.players.length;
     const currentTurn = room.singleDeviceTurn;
     const currentPlayer = room.players[currentTurn];
     const isLastPlayer = currentTurn === totalPlayers - 1;
-    const canAdvance = showRole && !countdownActive;
 
     if (waitingToPass) {
       const nextPlayer = isLastPlayer ? null : room.players[currentTurn + 1];
@@ -163,6 +136,12 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
         </div>
 
         <div style={{ marginBottom: "1.5rem" }}>
+          {currentPlayer && (
+            <PlayerBadge 
+              player={currentPlayer} 
+              isCurrentTurn={true} 
+            />
+          )}
           <h2 style={{
             fontSize: "1.4rem",
             fontWeight: 800,
@@ -171,23 +150,8 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
             alignItems: "center",
             justifyContent: "center",
             gap: "0.5rem",
+            marginTop: "0.5rem"
           }}>
-            <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: currentPlayer
-                ? `hsl(${currentPlayer.name.charCodeAt(0) * 13 % 360}, 60%, 40%)`
-                : "var(--primary-dim)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "1rem",
-              fontWeight: 900,
-              color: "#fff",
-            }}>
-              {currentPlayer?.name[0].toUpperCase()}
-            </div>
             {currentPlayer?.name}&apos;s Turn
           </h2>
           <p style={{ marginTop: "0.4rem", color: "var(--text-3)", fontSize: "0.9rem" }}>
@@ -314,29 +278,15 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
           )}
         </div>
 
-        {/* Countdown / Auto-advance */}
+        {/* Manual advance */}
         {showRole && (
-          <div className="anim-fade-in" style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "0.5rem",
-            color: "var(--text-3)",
-            fontSize: "0.95rem",
-            fontWeight: 600,
-            marginBottom: "1rem",
-            minHeight: "3rem"
-          }}>
-            {countdownActive ? (
-              <>
-                <Timer size={18} className="anim-pulse" /> Memorize your role… {countdown}s
-              </>
-            ) : (
-              <>
-               <Loader2 size={18} className="spinner" /> 
-               {isLastPlayer ? "Advancing to Clues…" : "Passing phone…"}
-              </>
-            )}
+          <div className="anim-fade-in" style={{ marginTop: "1.5rem" }}>
+            <button
+              onClick={handleHideAndPass}
+              className="btn btn-primary btn-full btn-lg"
+            >
+              Hide Role & Proceed
+            </button>
           </div>
         )}
       </div>
@@ -361,10 +311,10 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
         className="hover-lift"
         style={{
           background: showRole
-            ? me.role === "imposter" ? "var(--danger-dim)" : "var(--primary-dim)"
+            ? me?.role === "imposter" ? "var(--danger-dim)" : "var(--primary-dim)"
             : "var(--bg-elevated)",
           border: `1px solid ${showRole
-            ? me.role === "imposter" ? "rgba(244,63,94,0.3)" : "rgba(139,92,246,0.3)"
+            ? me?.role === "imposter" ? "rgba(244,63,94,0.3)" : "rgba(139,92,246,0.3)"
             : "var(--border)"}`,
           borderRadius: "var(--radius-xl)",
           padding: "2.5rem 1.5rem",
@@ -372,7 +322,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
           marginBottom: "2rem",
           transition: "all var(--dur-med) var(--ease-spring)",
           boxShadow: showRole
-            ? me.role === "imposter" ? "0 8px 32px var(--danger-glow)" : "0 8px 32px var(--primary-glow)"
+            ? me?.role === "imposter" ? "0 8px 32px var(--danger-glow)" : "0 8px 32px var(--primary-glow)"
             : "none",
         }}
       >
@@ -383,7 +333,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
           </div>
         ) : (
           <div className="anim-reveal" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-            {me.role === "imposter" ? (
+            {me?.role === "imposter" ? (
               <>
                 <UserX size={56} style={{ color: "var(--danger)" }} />
                 <h3 style={{ fontSize: "2rem", fontWeight: 900, color: "var(--danger)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1 }}>
@@ -473,7 +423,6 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
         )}
       </div>
 
-      {/* ── Auto-advance Indicator ── */}
       <div style={{
           marginTop: "1.5rem",
           minHeight: "3.5rem",
@@ -482,12 +431,14 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
           alignItems: "center"
       }}>
         {showRole ? (
-          <div className="anim-fade-in" style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-3)", fontWeight: 600, fontSize: "0.95rem" }}>
-            {countdownActive ? (
-              <><Timer size={18} className="anim-pulse" /> Auto-advancing in {countdown}s...</>
-            ) : (
-              <><Loader2 size={18} className="spinner" /> Waiting for others…</>
-            )}
+          <div className="anim-fade-in" style={{ width: "100%" }}>
+            <button
+              onClick={handleHideAndPass}
+              disabled={loading}
+              className="btn btn-primary btn-full btn-lg"
+            >
+              {loading ? <Loader2 size={20} className="spinner" /> : "I've memorized my role – Ready up"}
+            </button>
           </div>
         ) : (
           <div style={{
@@ -497,10 +448,11 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
             fontWeight: 500,
           }}>
             <Loader2 size={14} className="spinner" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "0.4rem" }} />
-            Don't let anyone see your screen
+            Don&apos;t let anyone see your screen
           </div>
         )}
       </div>
+
       <div style={{ marginTop: "1rem", fontSize: "0.85rem", color: "var(--text-3)", textAlign: "center" }}>
         {room.players.filter((p) => p.isReady).length} / {room.players.length} players ready
       </div>
