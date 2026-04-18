@@ -44,8 +44,10 @@ export interface Room {
   // game state
   word: string | null;
   wordCategory: string | null;   // category of the secret word (e.g. "Disaster")
-  imposterHint: string | null;
-  imposterId: string | null;
+  imposterHints: Record<string, string>; // playerId -> hint string
+  imposterIds: string[];
+  imposterCount: number;
+  manualImposterCount: number | null;
   submissions: Submission[];
   votes: Vote[];
   imposterGuess: string | null;
@@ -68,8 +70,10 @@ export interface RoomView {
   phase: GamePhase;
   word: string | null;          // null for imposter until results
   wordCategory: string | null;  // always visible (helps imposter blend)
-  imposterHint: string | null;  // only for imposter
-  imposterId: string | null;    // revealed only in results
+  imposterHint: string | null;  // only for imposter (the one matching their ID)
+  imposterIds: string[];        // revealed only in results
+  imposterCount: number;
+  manualImposterCount: number | null;
   submissions: Submission[];
   votes: Vote[];
   imposterGuess: string | null;

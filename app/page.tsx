@@ -19,6 +19,7 @@ export default function HomePage() {
   // Single Device Mode state
   const [singleDevice, setSingleDevice] = useState(false);
   const [sdPlayers, setSdPlayers] = useState<string[]>(["", "", ""]);
+  const [manualImposterCount, setManualImposterCount] = useState<number | null>(null);
 
   // Auto-fill room code from ?code= URL param (supports mobile share links)
   useEffect(() => {
@@ -39,7 +40,10 @@ export default function HomePage() {
       const res = await fetch("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostName: name.trim() }),
+        body: JSON.stringify({ 
+          hostName: name.trim(),
+          manualImposterCount 
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed to create room"); return; }
@@ -85,7 +89,7 @@ export default function HomePage() {
     setLoading(true);
     setError("");
     try {
-      const data = await createSingleDeviceRoomClient(names);
+      const data = await createSingleDeviceRoomClient(names, manualImposterCount);
       localStorage.setItem(`player_${data.code}`, data.playerIds[0]);
       localStorage.setItem(`sdPlayers_${data.code}`, JSON.stringify(data.playerIds));
       router.push(`/room/${data.code}`);
@@ -97,7 +101,7 @@ export default function HomePage() {
   }
 
   function addSdPlayer() {
-    if (sdPlayers.length >= 10) return;
+    if (sdPlayers.length >= 20) return;
     setSdPlayers([...sdPlayers, ""]);
   }
 
@@ -294,7 +298,7 @@ export default function HomePage() {
                           flexShrink: 0,
                           transition: "background 0.2s",
                         }}>
-                          {player.trim() ? player[0].toUpperCase() : i + 1}
+                          {player.trim() ? (isNaN(Number(player.trim())) ? player.trim()[0].toUpperCase() : player.trim()) : i + 1}
                         </div>
                         <input
                           className="input"
@@ -334,7 +338,7 @@ export default function HomePage() {
                     ))}
                   </div>
 
-                  {sdPlayers.length < 10 && (
+                  {sdPlayers.length < 20 && (
                     <button
                       type="button"
                       onClick={addSdPlayer}
@@ -359,6 +363,51 @@ export default function HomePage() {
                       <Plus size={15} /> Add Player
                     </button>
                   )}
+                </div>
+
+                {/* ── Settings Selector (Imposter Count) ── */}
+                <div style={{ marginBottom: "1.5rem", padding: "1rem", background: "rgba(255,255,255,0.03)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                  <label style={{
+                    display: "block",
+                    marginBottom: "0.75rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    color: "var(--text-3)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}>
+                    Game Rules
+                  </label>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: "0.85rem", color: "var(--text-2)", fontWeight: 500 }}>Imposter Count</span>
+                      <div style={{ display: "flex", gap: "4px", background: "var(--bg-base)", padding: "3px", borderRadius: "8px" }}>
+                        {[null, 1, 2, 3].map((val) => (
+                          <button
+                            key={val === null ? "auto" : val}
+                            type="button"
+                            onClick={() => setManualImposterCount(val)}
+                            disabled={val !== null && val >= sdPlayers.filter(n => n.trim()).length}
+                            style={{
+                              padding: "4px 10px",
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              borderRadius: "6px",
+                              border: "none",
+                              cursor: "pointer",
+                              transition: "all 0.1s",
+                              background: manualImposterCount === val ? "var(--primary)" : "transparent",
+                              color: manualImposterCount === val ? "#fff" : "var(--text-3)",
+                              opacity: (val !== null && val >= sdPlayers.filter(n => n.trim()).length) ? 0.3 : 1,
+                            }}
+                          >
+                            {val === null ? "Auto" : val}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {error && <div className="error-msg anim-fade-in" style={{ marginBottom: "0.75rem" }}>{error}</div>}
@@ -507,6 +556,36 @@ export default function HomePage() {
                       </div>
                     )}
 
+                    {/* ── Multiplayer Creation Setting ── */}
+                    {tab === "create" && (
+                      <div style={{ marginBottom: "0.5rem", padding: "0.75rem", background: "rgba(255,255,255,0.02)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: "0.8rem", color: "var(--text-3)", fontWeight: 600 }}>Imposter Count</span>
+                          <div style={{ display: "flex", gap: "2px", background: "var(--bg-base)", padding: "2px", borderRadius: "6px" }}>
+                            {[null, 1, 2, 3].map((val) => (
+                              <button
+                                key={val === null ? "multi-auto" : `multi-${val}`}
+                                type="button"
+                                onClick={() => setManualImposterCount(val)}
+                                style={{
+                                  padding: "3px 8px",
+                                  fontSize: "0.7rem",
+                                  fontWeight: 600,
+                                  borderRadius: "4px",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  background: manualImposterCount === val ? "var(--primary)" : "transparent",
+                                  color: manualImposterCount === val ? "#fff" : "var(--text-3)",
+                                }}
+                              >
+                                {val === null ? "Auto" : val}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {error && <div className="error-msg anim-fade-in">{error}</div>}
 
                     {/* Submit button */}
@@ -554,7 +633,7 @@ export default function HomePage() {
           >
             {singleDevice
               ? "Pass the phone around — each player sees their role privately"
-              : "3–10 players · No account needed · Instant rooms"}
+              : "3–20 players · No account needed · Instant rooms"}
           </p>
 
         </div>

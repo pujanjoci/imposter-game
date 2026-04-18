@@ -58,8 +58,10 @@ function baseRoom(code: string): Omit<Room, "players"> {
     phase: "lobby",
     word: null,
     wordCategory: null,
-    imposterHint: null,
-    imposterId: null,
+    imposterHints: {},
+    imposterIds: [],
+    imposterCount: 0,
+    manualImposterCount: null,
     submissions: [],
     votes: [],
     imposterGuess: null,
@@ -78,13 +80,14 @@ function baseRoom(code: string): Omit<Room, "players"> {
 // Public API
 // ---------------------------------------------------------------------------
 
-export function createRoom(hostName: string): { room: Room; hostId: string } {
+export function createRoom(hostName: string, manualImposterCount: number | null = null): { room: Room; hostId: string } {
   const code = generateCode();
   const hostId = generateId();
 
   const room: Room = {
     ...baseRoom(code),
     players: [makePlayer({ id: hostId, name: hostName, isHost: true })],
+    manualImposterCount,
   };
 
   rooms.set(code, room);
@@ -97,7 +100,8 @@ export function createRoom(hostName: string): { room: Room; hostId: string } {
  * Returns IDs for every player in order.
  */
 export function createRoomSingleDevice(
-  playerNames: string[]
+  playerNames: string[],
+  manualImposterCount: number | null = null
 ): { room: Room; playerIds: string[] } {
   const code = generateCode();
   const playerIds: string[] = [];
@@ -113,6 +117,7 @@ export function createRoomSingleDevice(
     players,
     singleDeviceMode: true,
     singleDeviceTurn: 0,
+    manualImposterCount,
   };
 
   rooms.set(code, room);
@@ -126,7 +131,7 @@ export function joinRoom(
   const room = rooms.get(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "lobby") return { error: "Game already in progress" };
-  if (room.players.length >= 10) return { error: "Room is full (max 10)" };
+  if (room.players.length >= 20) return { error: "Room is full (max 20)" };
   if (room.singleDeviceMode) return { error: "This is a single-device room — all players were set up at creation" };
 
   const trimmed = playerName.trim();
@@ -162,18 +167,30 @@ export function startGame(
 
 // Shared setup logic for both first start and subsequent rounds
 function beginRound(room: Room): void {
-  // Pick a new imposter each round
-  const imposterIndex = Math.floor(Math.random() * room.players.length);
-  room.imposterId = room.players[imposterIndex].id;
+  const { getImposterCount } = require("./words");
+  const count = room.manualImposterCount ?? getImposterCount(room.players.length);
+  room.imposterCount = count;
 
-  const { word, category, hint } = pickRandomWord();
+  // Pick N unique imposters
+  const shuffled = [...room.players].sort(() => Math.random() - 0.5);
+  const selectedImposters = shuffled.slice(0, count);
+  room.imposterIds = selectedImposters.map((p) => p.id);
+
+  const { pickRandomWord } = require("./words");
+  const { word, category, hints } = pickRandomWord();
   room.word = word;
   room.wordCategory = category;
-  room.imposterHint = hint;
+
+  // Assign a unique hint to each imposter
+  room.imposterHints = {};
+  const shuffledHints = [...hints].sort(() => Math.random() - 0.5);
+  selectedImposters.forEach((p, i) => {
+    room.imposterHints[p.id] = shuffledHints[i % shuffledHints.length];
+  });
 
   room.players.forEach((p) => {
     p.isReady = false;
-    p.role = p.id === room.imposterId ? "imposter" : "crewmate";
+    p.role = room.imposterIds.includes(p.id) ? "imposter" : "crewmate";
     p.clue = null;
     p.vote = null;
     p.skippedVote = false;
@@ -304,7 +321,7 @@ export function submitGuess(
   const room = rooms.get(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
-  if (room.imposterId !== playerId) return { error: "Only the imposter can guess" };
+  if (!room.imposterIds.includes(playerId)) return { error: "Only an imposter can guess" };
 
   const trimmed = guess.trim();
   if (!trimmed) return { error: "Guess cannot be empty" };
@@ -342,7 +359,7 @@ export function skipGuess(
   const room = rooms.get(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
-  if (room.imposterId !== playerId) return { error: "Only the imposter can skip" };
+  if (!room.imposterIds.includes(playerId)) return { error: "Only an imposter can skip" };
 
   room.imposterGuess = null;
   room.imposterGuessCorrect = null;
@@ -438,12 +455,12 @@ function resolveVotes(room: Room): void {
 
   const mostVotedPlayer = room.players.find((p) => p.id === mostVotedId);
 
-  if (mostVotedId === room.imposterId) {
+  if (room.imposterIds.includes(mostVotedId)) {
     room.result = "players_win";
-    room.resultReason = `Crewmates correctly voted out the Imposter: ${mostVotedPlayer?.name}!`;
+    room.resultReason = `Crewmates correctly voted out an Imposter: ${mostVotedPlayer?.name}!`;
   } else {
     room.result = "imposter_wins";
-    room.resultReason = `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposter survives.`;
+    room.resultReason = `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposters survive.`;
   }
 
   room.phase = "results";
@@ -479,7 +496,7 @@ export function getRoomView(code: string, playerId: string): RoomView | null {
   const room = rooms.get(code);
   if (!room) return null;
 
-  const isImposter = room.imposterId === playerId;
+  const isImposter = room.imposterIds.includes(playerId);
   const isResultsPhase = room.phase === "results";
 
   // In single-device mode, the "active" player is at singleDeviceTurn
@@ -492,7 +509,7 @@ export function getRoomView(code: string, playerId: string): RoomView | null {
   const effectivePlayerId = isSingleDevice && room.phase === "role_reveal"
     ? activeSingleDevicePlayerId
     : playerId;
-  const effectiveIsImposter = room.imposterId === effectivePlayerId;
+  const effectiveIsImposter = room.imposterIds.includes(effectivePlayerId);
 
   return {
     code: room.code,
@@ -505,16 +522,16 @@ export function getRoomView(code: string, playerId: string): RoomView | null {
       // - SD clue/inter/results: reveal all roles (CluePhase needs to know who is imposter)
       // - Multiplayer: show only own role
       role: isResultsPhase
-        ? (p.id === room.imposterId ? "imposter" : "crewmate")
+        ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
         : isSingleDevice && room.phase === "role_reveal"
           ? (p.id === activeSingleDevicePlayerId
-              ? (p.id === room.imposterId ? "imposter" : "crewmate")
+              ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
               : undefined)
           : isSingleDevice
             // In SD clue/inter phase, reveal all roles so components can render per-player
-            ? (p.id === room.imposterId ? "imposter" : "crewmate")
+            ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
             : p.id === playerId
-              ? (p.id === room.imposterId ? "imposter" : "crewmate")
+              ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
               : undefined,
       clue: p.clue ?? null,
       vote: p.vote ?? null,
@@ -539,17 +556,16 @@ export function getRoomView(code: string, playerId: string): RoomView | null {
     wordCategory: room.wordCategory,
 
     // Hint:
-    // - Results: always reveal
-    // - SD mode: always include (CluePhase shows it only to imposter player)
-    // - Multiplayer: only imposter sees it
-    imposterHint: isResultsPhase
-      ? room.imposterHint
-      : (isSingleDevice
-        ? room.imposterHint  // always include; UI gates based on player role
-        : (isImposter ? room.imposterHint : null)),
+    // - Results: reveal only for own player or all in SD?
+    // Actually, imposterHint in RoomView is for the specific PLAYER viewing.
+    // In results, maybe we should still just send the specific hint? 
+    // Results page can show all hints if it has imposterIds and we update Submission/Player objects? 
+    // Let's keep it simple: imposterHint is yours.
+    imposterHint: room.imposterHints[playerId] || (isSingleDevice ? room.imposterHints[activeSingleDevicePlayerId] : null),
 
-    // Imposter identity revealed only in results
-    imposterId: isResultsPhase ? room.imposterId : null,
+    imposterIds: isResultsPhase ? room.imposterIds : [],
+    imposterCount: room.imposterCount,
+    manualImposterCount: room.manualImposterCount,
 
     submissions: room.submissions,
     votes: room.votes,

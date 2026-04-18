@@ -99,10 +99,14 @@ export default function InterRound({
             letterSpacing: "-0.02em",
           }}
         >
-          Imposter is deciding…
+          {room.imposterCount > 1 ? "Imposters are deciding…" : "Imposter is deciding…"}
         </h2>
-        <p style={{ color: "var(--text-3)", marginTop: "0.5rem", fontSize: "0.95rem" }}>
-          They can try to guess the secret word now — or skip straight to the vote.
+        <p style={{ color: "var(--text-3)", marginTop: "0.4rem", fontSize: "0.95rem" }}>
+          {room.imposterCount > 1
+            ? (isSingleDevice 
+                ? "As one of the imposters, you can try to guess the word." 
+                : "You and your fellow imposters can guess the word to win instantly.")
+            : "Think you've figured it out? Guess the word to win instantly!"}
         </p>
 
         {/* Show everyone's clues while waiting */}
@@ -196,8 +200,8 @@ export default function InterRound({
             }}
           >
             {isSingleDevice
-              ? "Imposter Decision"
-              : "Your Turn to Guess"}
+              ? (room.imposterCount > 1 ? "Imposters' Decision" : "Imposter Decision")
+              : (room.imposterCount > 1 ? "An Imposter's Turn to Guess" : "Your Turn to Guess")}
           </h3>
           <p style={{ color: "var(--text-2)", fontSize: "0.9rem", fontWeight: 500 }}>
             {!isSingleDevice && "Guess the secret word now to win instantly — or skip to the vote."}

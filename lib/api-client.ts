@@ -22,9 +22,9 @@ export function isLocalRoom(code: string): boolean {
 /**
  * Creates a single device room entirely locally.
  */
-export async function createSingleDeviceRoomClient(playerNames: string[]): Promise<{ code: string; playerIds: string[] }> {
+export async function createSingleDeviceRoomClient(playerNames: string[], manualImposterCount: number | null = null): Promise<{ code: string; playerIds: string[] }> {
   // We simulate an async API call but actually do it synchronously locally
-  const { room, playerIds } = createLocalRoom(playerNames);
+  const { room, playerIds } = createLocalRoom(playerNames, manualImposterCount);
   return { code: room.code, playerIds };
 }
 

@@ -53,7 +53,7 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
           fontSize: "0.95rem", fontWeight: 500,
           display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem"
         }}>
-          {room.players.length} / 10 players joined
+          {room.players.length} / 20 players joined
         </p>
       </div>
       )}

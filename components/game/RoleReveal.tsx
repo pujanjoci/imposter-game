@@ -5,6 +5,7 @@ import { RoomView } from "@/lib/types";
 import { advanceSingleDeviceTurnClient } from "@/lib/api-client";
 import { Eye, EyeOff, Loader2, Sparkles, UserX, ShieldCheck, Tag, ChevronRight } from "lucide-react";
 import { PlayerBadge } from "@/components/ui/PlayerBadge";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 interface RoleRevealProps {
   room: RoomView;
@@ -161,7 +162,13 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
 
         {/* Role Card */}
         <div
-          onClick={() => !showRole && setShowRole(true)}
+          onClick={() => {
+            if (!showRole) {
+              triggerHaptic(HAPTICS.REVEAL);
+              playGameSound("REVEAL");
+              setShowRole(true);
+            }
+          }}
           className="hover-lift"
           style={{
             background: showRole
@@ -307,7 +314,16 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
 
       {/* ── Role Card ── */}
       <div
-        onClick={() => setShowRole(!showRole)}
+        onClick={() => {
+          if (!showRole) {
+            triggerHaptic(HAPTICS.REVEAL);
+            playGameSound("REVEAL");
+          } else {
+            playGameSound("TAP");
+            triggerHaptic(HAPTICS.TAP);
+          }
+          setShowRole(!showRole);
+        }}
         className="hover-lift"
         style={{
           background: showRole

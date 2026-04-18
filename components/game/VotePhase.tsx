@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import { Loader2, UserX, Skull, SkipForward } from "lucide-react";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 import { submitVoteClient } from "@/lib/api-client";
 
 export default function VotePhase({
@@ -24,6 +25,8 @@ export default function VotePhase({
 
   async function castVote(targetId: string | "skip") {
     if (hasVoted || loading) return;
+    triggerHaptic(HAPTICS.VOTE);
+    playGameSound("VOTE");
     setSelectedId(targetId);
     setLoading(true);
     try {
@@ -68,7 +71,7 @@ export default function VotePhase({
           letterSpacing: "-0.02em",
         }}
       >
-        Vote out the Imposter
+        {room.imposterCount > 1 ? "Vote out the Imposters" : "Vote out the Imposter"}
       </h2>
       <p style={{ color: "var(--text-3)", marginTop: "0.4rem", fontSize: "0.95rem" }}>
         {hasVoted

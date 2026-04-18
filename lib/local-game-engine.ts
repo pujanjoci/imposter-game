@@ -1,5 +1,5 @@
 import { Room, Player, RoomView, Vote } from "./types";
-import { pickRandomWord } from "./words";
+import { pickRandomWord, getImposterCount } from "./words";
 
 const MIN_PLAYERS = 3;
 
@@ -59,8 +59,10 @@ function baseRoom(code: string): Omit<Room, "players"> {
     phase: "lobby",
     word: null,
     wordCategory: null,
-    imposterHint: null,
-    imposterId: null,
+    imposterHints: {},
+    imposterIds: [],
+    imposterCount: 0,
+    manualImposterCount: null,
     submissions: [],
     votes: [],
     imposterGuess: null,
@@ -79,7 +81,7 @@ function baseRoom(code: string): Omit<Room, "players"> {
 // Public API for Local Game Engine
 // ---------------------------------------------------------------------------
 
-export function createLocalRoom(playerNames: string[]): { room: Room; playerIds: string[] } {
+export function createLocalRoom(playerNames: string[], manualImposterCount: number | null = null): { room: Room; playerIds: string[] } {
   const code = generateCode();
   const playerIds: string[] = [];
 
@@ -92,6 +94,7 @@ export function createLocalRoom(playerNames: string[]): { room: Room; playerIds:
   const room: Room = {
     ...baseRoom(code),
     players,
+    manualImposterCount,
   };
 
   saveLocalRoomToStorage(room);
@@ -115,17 +118,28 @@ export function startLocalGame(code: string, requesterId: string): { error: stri
 }
 
 function beginRound(room: Room): void {
-  const imposterIndex = Math.floor(Math.random() * room.players.length);
-  room.imposterId = room.players[imposterIndex].id;
+  const count = room.manualImposterCount ?? getImposterCount(room.players.length);
+  room.imposterCount = count;
 
-  const { word, category, hint } = pickRandomWord();
+  // Pick N unique imposters
+  const shuffled = [...room.players].sort(() => Math.random() - 0.5);
+  const selectedImposters = shuffled.slice(0, count);
+  room.imposterIds = selectedImposters.map((p) => p.id);
+
+  const { word, category, hints } = pickRandomWord();
   room.word = word;
   room.wordCategory = category;
-  room.imposterHint = hint;
+
+  // Assign a unique hint to each imposter
+  room.imposterHints = {};
+  const shuffledHints = [...hints].sort(() => Math.random() - 0.5);
+  selectedImposters.forEach((p, i) => {
+    room.imposterHints[p.id] = shuffledHints[i % shuffledHints.length];
+  });
 
   room.players.forEach((p) => {
     p.isReady = false;
-    p.role = p.id === room.imposterId ? "imposter" : "crewmate";
+    p.role = room.imposterIds.includes(p.id) ? "imposter" : "crewmate";
     p.clue = null;
     p.vote = null;
     p.skippedVote = false;
@@ -180,7 +194,7 @@ export function submitLocalGuess(code: string, playerId: string, guess: string):
   const room = getLocalRoomFromStorage(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
-  if (room.imposterId !== playerId) return { error: "Only the imposter can guess" };
+  if (!room.imposterIds.includes(playerId)) return { error: "Only the imposter can guess" };
 
   const trimmed = guess.trim();
   if (!trimmed) return { error: "Guess cannot be empty" };
@@ -208,7 +222,7 @@ export function skipLocalGuess(code: string, playerId: string): { error: string 
   const room = getLocalRoomFromStorage(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
-  if (room.imposterId !== playerId) return { error: "Only the imposter can skip" };
+  if (!room.imposterIds.includes(playerId)) return { error: "Only the imposter can skip" };
 
   room.imposterGuess = null;
   room.imposterGuessCorrect = null;
@@ -225,9 +239,6 @@ export function submitLocalVote(code: string, voterId: string, targetId: string 
   const room = getLocalRoomFromStorage(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "results") return { error: "Wrong phase" }; 
-  // Wait, in SD mode the voting happens IN results phase.
-  // Actually, previously SD mode did not have a vote_phase. 
-  // Let's create a vote logic equivalent for SD mode.
   if (room.votes.some((v) => v.voterId === voterId)) return { error: "Already voted" };
 
   const voter = room.players.find((p) => p.id === voterId);
@@ -244,13 +255,6 @@ export function submitLocalVote(code: string, voterId: string, targetId: string 
 
   if (room.votes.length === room.players.length) {
     resolveLocalVotes(room);
-  } else {
-    // Move to next player's turn to vote? No, in SD mode the votes are just cast consecutively by passing the phone
-    // We can just keep it in results phase while they vote, or create a specific vote view.
-    // In original code, SD mode skipped vote_phase and went straight to Results, assuming they just discussed. 
-    // Wait! Let's check original game-store for SD vote logic.
-    // In original: "if (room.singleDeviceMode) room.phase = 'results';"
-    // So SD mode never collects individual votes in the App! They just vote in real life, and then reveal who was imposter.
   }
 
   saveLocalRoomToStorage(room);
@@ -259,7 +263,33 @@ export function submitLocalVote(code: string, voterId: string, targetId: string 
 }
 
 function resolveLocalVotes(room: Room): void {
-  // Not used if we skip voting in the app for SD mode.
+  const voteCounts: Record<string, number> = {};
+  room.votes.forEach(v => {
+    if (v.targetId !== "skip") {
+      voteCounts[v.targetId] = (voteCounts[v.targetId] || 0) + 1;
+    }
+  });
+
+  let mostVotedId = "";
+  let maxVotes = 0;
+  for (const id in voteCounts) {
+    if (voteCounts[id] > maxVotes) {
+      maxVotes = voteCounts[id];
+      mostVotedId = id;
+    }
+  }
+
+  if (!mostVotedId) return;
+
+  const mostVotedPlayer = room.players.find((p) => p.id === mostVotedId);
+
+  if (room.imposterIds.includes(mostVotedId)) {
+    room.result = "players_win";
+    room.resultReason = `Crewmates correctly voted out an Imposter: ${mostVotedPlayer?.name}!`;
+  } else {
+    room.result = "imposter_wins";
+    room.resultReason = `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposters survive.`;
+  }
 }
 
 export function revealLocalImposter(code: string): { error: string } | null {
@@ -267,8 +297,8 @@ export function revealLocalImposter(code: string): { error: string } | null {
   if (!room) return { error: "Room not found" };
   if (room.phase !== "results") return { error: "Wrong phase" };
   
-  room.result = "players_win"; // Doesn't matter, just trigger full reveal
-  room.resultReason = `The Imposter was ${room.players.find(p => p.id === room.imposterId)?.name}!`;
+  room.result = "players_win";
+  room.resultReason = `The Imposters were ${room.players.filter(p => room.imposterIds.includes(p.id)).map(p => p.name).join(", ")}!`;
 
   saveLocalRoomToStorage(room);
   broadcast(code);
@@ -294,10 +324,9 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
   const room = getLocalRoomFromStorage(code);
   if (!room) return null;
 
-  const isImposter = room.imposterId === playerId;
+  const isImposter = room.imposterIds.includes(playerId);
   const isResultsPhase = room.phase === "results";
   
-  // Single device specifics
   const isSingleDevice = room.singleDeviceMode;
   const activePlayer = isSingleDevice ? room.players[room.singleDeviceTurn] : null;
   const activeSingleDevicePlayerId = activePlayer?.id ?? "";
@@ -305,22 +334,22 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
   const effectivePlayerId = isSingleDevice && room.phase === "role_reveal"
     ? activeSingleDevicePlayerId
     : playerId;
-  const effectiveIsImposter = room.imposterId === effectivePlayerId;
+  const effectiveIsImposter = room.imposterIds.includes(effectivePlayerId);
 
   return {
     code: room.code,
     players: room.players.map((p) => ({
       ...p,
       role: isResultsPhase
-        ? (p.id === room.imposterId ? "imposter" : "crewmate")
+        ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
         : isSingleDevice && room.phase === "role_reveal"
           ? (p.id === activeSingleDevicePlayerId
-              ? (p.id === room.imposterId ? "imposter" : "crewmate")
+              ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
               : undefined)
           : isSingleDevice
-            ? (p.id === room.imposterId ? "imposter" : "crewmate")
+            ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
             : p.id === playerId
-              ? (p.id === room.imposterId ? "imposter" : "crewmate")
+              ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
               : undefined,
       clue: p.clue ?? null,
       vote: p.vote ?? null,
@@ -335,12 +364,10 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
           ? room.word
           : (isImposter ? null : room.word)),
     wordCategory: room.wordCategory,
-    imposterHint: isResultsPhase
-      ? room.imposterHint
-      : (isSingleDevice
-        ? room.imposterHint
-        : (isImposter ? room.imposterHint : null)),
-    imposterId: isResultsPhase ? room.imposterId : null,
+    imposterHint: room.imposterHints[playerId] || (isSingleDevice ? room.imposterHints[activeSingleDevicePlayerId] : null),
+    imposterIds: isResultsPhase ? room.imposterIds : [],
+    imposterCount: room.imposterCount,
+    manualImposterCount: room.manualImposterCount,
     submissions: room.submissions,
     votes: room.votes,
     imposterGuess: room.imposterGuess,

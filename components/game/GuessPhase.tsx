@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import { Send, Crosshair, Target, Loader2, Sparkles, MessageSquare } from "lucide-react";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 export default function GuessPhase({ room, playerId }: { room: RoomView; playerId: string }) {
   const [guess, setGuess] = useState("");
@@ -14,6 +15,8 @@ export default function GuessPhase({ room, playerId }: { room: RoomView; playerI
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!guess.trim()) return;
+    triggerHaptic(HAPTICS.REVEAL);
+    playGameSound("REVEAL");
     setLoading(true);
     try {
       await fetch(`/api/rooms/${room.code}/guess`, {

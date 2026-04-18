@@ -15,9 +15,9 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      if (playerNames.length > 10) {
+      if (playerNames.length > 20) {
         return NextResponse.json(
-          { error: "Maximum 10 players" },
+          { error: "Maximum 20 players" },
           { status: 400 }
         );
       }
@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      const { room, playerIds } = createRoomSingleDevice(names);
+      const manualImposterCount = typeof body.manualImposterCount === "number" ? body.manualImposterCount : null;
+      const { room, playerIds } = createRoomSingleDevice(names, manualImposterCount);
       return NextResponse.json({ code: room.code, playerIds }, { status: 201 });
     }
 
@@ -45,7 +46,8 @@ export async function POST(req: NextRequest) {
     if (!hostName || !String(hostName).trim()) {
       return NextResponse.json({ error: "Host name is required" }, { status: 400 });
     }
-    const { room, hostId } = createRoom(String(hostName).trim());
+    const manualImposterCount = typeof body.manualImposterCount === "number" ? body.manualImposterCount : null;
+    const { room, hostId } = createRoom(String(hostName).trim(), manualImposterCount);
     return NextResponse.json({ code: room.code, playerId: hostId }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Failed to create room" }, { status: 500 });

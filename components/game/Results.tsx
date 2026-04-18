@@ -1,13 +1,14 @@
 "use client";
 
 import { RoomView } from "@/lib/types";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   UserX, ShieldCheck, Loader2, Sparkles, Crown,
   CheckCircle2, XCircle, SkipForward, Users, Eye, Tag,
   BookOpen,
 } from "lucide-react";
 import { nextRoundClient } from "@/lib/api-client";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 interface ResultsProps {
   room: RoomView;
@@ -19,12 +20,20 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
   const [loading, setLoading] = useState(false);
   const [imposterRevealed, setImposterRevealed] = useState(false);
 
+  // Vibrate once on mount in multiplayer mode to signal game end
+  useEffect(() => {
+    if (!room.singleDeviceMode) {
+      triggerHaptic(HAPTICS.WINNER);
+      playGameSound("WINNER");
+    }
+  }, []);
+
   const me = room.players.find((p) => p.id === playerId);
   if (!me) return null;
 
   const imposterWon = room.result === "imposter_wins";
   const isTieOrSkip = room.result === null;
-  const imposterPlayer = room.players.find((p) => p.id === room.imposterId);
+  const imposterPlayers = room.players.filter((p) => room.imposterIds.includes(p.id));
 
   async function handleNextRound() {
     setLoading(true);
@@ -150,11 +159,15 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               marginBottom: "1.5rem",
               fontStyle: "italic",
             }}>
-              Discuss the clues, then press the button to reveal who the imposter was!
+              Discuss the clues, then press the button to reveal who the {room.imposterCount > 1 ? "imposters were" : "imposter was"}!
             </p>
 
             <button
-              onClick={() => setImposterRevealed(true)}
+              onClick={() => {
+                triggerHaptic(HAPTICS.WINNER);
+                playGameSound("WINNER");
+                setImposterRevealed(true);
+              }}
               className="btn btn-primary btn-lg btn-full"
               style={{
                 touchAction: "manipulation",
@@ -163,7 +176,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 fontSize: "1rem",
               }}
             >
-              <Eye size={20} /> Reveal the Imposter!
+              <Eye size={20} /> Reveal the {room.imposterCount > 1 ? "Imposters" : "Imposter"}!
             </button>
           </>
         ) : (
@@ -180,7 +193,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
             }}>
               <UserX size={52} style={{ color: "var(--danger)", marginBottom: "0.75rem" }} />
               <div style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--danger)", fontWeight: 800, marginBottom: "0.5rem" }}>
-                The Imposter Was…
+                The {room.imposterCount > 1 ? "Imposters Were" : "Imposter Was"}…
               </div>
               <div style={{
                 fontSize: "2.25rem",
@@ -190,10 +203,10 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 lineHeight: 1,
                 marginBottom: "0.5rem",
               }}>
-                {imposterPlayer?.name ?? "Unknown"}
+                {pluralizeImposterNames(imposterPlayers)}
               </div>
               <div style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>
-                was blending in all along!
+                {room.imposterCount > 1 ? "were blending in all along!" : "was blending in all along!"}
               </div>
             </div>
 
@@ -247,7 +260,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                   textAlign: "left",
                 }}>
                   <div style={{ fontSize: "0.7rem", color: "var(--danger)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>
-                    Imposter&apos;s Hint Was
+                    {room.imposterCount > 1 ? "Your Hint Was" : "Imposter's Hint Was"}
                   </div>
                   <div style={{ fontSize: "0.9rem", color: "var(--text-2)", fontWeight: 500, lineHeight: 1.4 }}>
                     "{room.imposterHint}"
@@ -274,7 +287,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 </h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   {room.submissions.map((s) => {
-                    const isImposter = s.playerId === room.imposterId;
+                    const isImposter = room.imposterIds.includes(s.playerId);
                     return (
                       <div key={s.playerId} style={{
                         display: "flex",
@@ -332,6 +345,14 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
     );
   }
 
+  function pluralizeImposterNames(imposters: any[]) {
+    if (imposters.length === 0) return "Unknown";
+    if (imposters.length === 1) return imposters[0].name;
+    if (imposters.length === 2) return `${imposters[0].name} and ${imposters[1].name}`;
+    const allButLast = imposters.slice(0, -1).map(p => p.name).join(", ");
+    return `${allButLast}, and ${imposters[imposters.length - 1].name}`;
+  }
+
   // ── MULTIPLAYER MODE ──────────────────────────────────────────────────────
 
   // Derive header color/icon
@@ -352,7 +373,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
   const headline = isTieOrSkip
     ? "NO WINNER"
     : imposterWon
-      ? "IMPOSTER WINS!"
+      ? (room.imposterCount > 1 ? "IMPOSTERS WIN!" : "IMPOSTER WINS!")
       : "CREWMATES WIN!";
 
   return (
@@ -472,10 +493,10 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               marginBottom: "0.2rem",
             }}
           >
-            The Imposter
+            The {room.imposterCount > 1 ? "Imposters" : "Imposter"}
           </div>
           <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--text-1)" }}>
-            {imposterPlayer?.name ?? "Unknown"}
+            {pluralizeImposterNames(imposterPlayers)}
           </div>
         </div>
       </div>
@@ -502,7 +523,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
           </div>
           <div>
             <div style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--danger)", fontWeight: 800, marginBottom: "0.2rem" }}>
-              Imposter&apos;s Hint Was
+              {room.imposterCount > 1 ? "Your Hint Was" : "Imposter's Hint Was"}
             </div>
             <div style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-2)", lineHeight: 1.4 }}>
               "{room.imposterHint}"
@@ -577,7 +598,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
         </div>
       )}
 
-      {/* ── Vote breakdown ── */}
+      {/* Add helping function at bottom of component or before return */}
       {room.votes.length > 0 && (
         <div
           className="anim-fade-in"
@@ -608,7 +629,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 (v) => v.targetId === p.id
               ).length;
               if (votesAgainst === 0) return null;
-              const isImposter = p.id === room.imposterId;
+              const isImposter = room.imposterIds.includes(p.id);
               return (
                 <div
                   key={p.id}

@@ -1,74 +1,82 @@
-export const WORD_BANK = [
-  // ── PROFESSIONS ──
-  { word: "doctor", category: "Profession", hint: "medicine" },
-  { word: "teacher", category: "Profession", hint: "education" },
-  { word: "artist", category: "Profession", hint: "creative" },
-  { word: "astronaut", category: "Profession", hint: "space" },
-  { word: "chef", category: "Profession", hint: "food" },
-  { word: "firefighter", category: "Profession", hint: "emergency" },
-  { word: "detective", category: "Profession", hint: "investigation" },
-  { word: "gladiator", category: "Profession", hint: "combat" },
-
-  // ── ANIMALS ──
-  { word: "elephant", category: "Animal", hint: "mammal" },
-  { word: "penguin", category: "Animal", hint: "bird" },
-  { word: "kangaroo", category: "Animal", hint: "marsupial" },
-  { word: "dolphin", category: "Animal", hint: "aquatic" },
-  { word: "cheetah", category: "Animal", hint: "feline" },
-  { word: "chameleon", category: "Animal", hint: "reptile" },
-  { word: "octopus", category: "Animal", hint: "marine" },
-  { word: "peacock", category: "Animal", hint: "feathers" },
-
-  // ── FOOD & DRINK ──
-  { word: "pizza", category: "Food", hint: "dough" },
-  { word: "sushi", category: "Food", hint: "seafood" },
-  { word: "chocolate", category: "Food", hint: "sweet" },
-  { word: "coffee", category: "Drink", hint: "caffeine" },
-  { word: "taco", category: "Food", hint: "mexican" },
-  { word: "spaghetti", category: "Food", hint: "pasta" },
-  { word: "pancake", category: "Food", hint: "breakfast" },
-  { word: "smoothie", category: "Drink", hint: "blended" },
-
-  // ── OBJECTS ──
-  { word: "camera", category: "Object", hint: "photography" },
-  { word: "laptop", category: "Object", hint: "computer" },
-  { word: "guitar", category: "Object", hint: "instrument" },
-  { word: "telescope", category: "Object", hint: "lenses" },
-  { word: "bicycle", category: "Object", hint: "vehicle" },
-  { word: "umbrella", category: "Object", hint: "weather" },
-  { word: "lantern", category: "Object", hint: "light" },
-  { word: "compass", category: "Object", hint: "navigation" },
-
-  // ── PLACES & GEOGRAPHY ──
-  { word: "beach", category: "Location", hint: "sand" },
-  { word: "jungle", category: "Location", hint: "forest" },
-  { word: "library", category: "Location", hint: "books" },
-  { word: "hospital", category: "Location", hint: "medical" },
-  { word: "tsunami", category: "Disaster", hint: "wave" },
-  { word: "volcano", category: "Geology", hint: "eruption" },
-  { word: "pyramid", category: "Landmark", hint: "monument" },
-  { word: "museum", category: "Location", hint: "exhibition" },
-
-  // ── FANTASY & MYTHOLOGY ──
-  { word: "dragon", category: "Mythology", hint: "creature" },
-  { word: "wizard", category: "Fantasy", hint: "magic" },
-  { word: "vampire", category: "Mythology", hint: "undead" },
-  { word: "mermaid", category: "Mythology", hint: "ocean" },
-  { word: "zombie", category: "Mythology", hint: "monster" },
-
-  // ── MISCELLANEOUS ──
-  { word: "rainbow", category: "Nature", hint: "colors" },
-  { word: "tornado", category: "Weather", hint: "storm" },
-  { word: "diamond", category: "Material", hint: "gemstone" },
-  { word: "magnet", category: "Science", hint: "attraction" },
-  { word: "battery", category: "Object", hint: "power" },
-];
-
-export function getRandomWord() {
-  const i = Math.floor(Math.random() * WORD_BANK.length);
-  return WORD_BANK[i];
+export interface WordEntry {
+  word: string;
+  category: string;
+  hints: string[];
 }
 
-export function pickRandomWord(): { word: string; category: string; hint: string } {
+export const WORD_BANK: WordEntry[] = [
+  // ── PROFESSIONS ──
+  { word: "doctor", category: "Profession", hints: ["medicine", "stethoscope", "hospital", "patients"] },
+  { word: "teacher", category: "Profession", hints: ["education", "classroom", "grading", "mentor"] },
+  { word: "artist", category: "Profession", hints: ["creative", "canvas", "gallery", "medium"] },
+  { word: "astronaut", category: "Profession", hints: ["space", "gravity", "orbit", "shuttle"] },
+  { word: "chef", category: "Profession", hints: ["food", "kitchen", "recipe", "cuisine"] },
+  { word: "firefighter", category: "Profession", hints: ["emergency", "extinguish", "rescue", "hazard"] },
+  { word: "detective", category: "Profession", hints: ["investigation", "mystery", "clues", "evidence"] },
+  { word: "gladiator", category: "Profession", hints: ["combat", "arena", "warrior", "spectacle"] },
+
+  // ── ANIMALS ──
+  { word: "elephant", category: "Animal", hints: ["mammal", "trunk", "tusks", "herd"] },
+  { word: "penguin", category: "Animal", hints: ["bird", "arctic", "waddle", "flightless"] },
+  { word: "kangaroo", category: "Animal", hints: ["marsupial", "pouch", "hopping", "outback"] },
+  { word: "dolphin", category: "Animal", hints: ["aquatic", "intelligent", "sonar", "pod"] },
+  { word: "cheetah", category: "Animal", hints: ["feline", "speed", "spotted", "predator"] },
+  { word: "chameleon", category: "Animal", hints: ["reptile", "camouflage", "color", "scales"] },
+  { word: "octopus", category: "Animal", hints: ["marine", "tentacles", "ink", "mollusk"] },
+  { word: "peacock", category: "Animal", hints: ["feathers", "colorful", "display", "fowl"] },
+
+  // ── FOOD & DRINK ──
+  { word: "pizza", category: "Food", hints: ["dough", "cheese", "slice", "topping"] },
+  { word: "sushi", category: "Food", hints: ["seafood", "rice", "raw", "roll"] },
+  { word: "chocolate", category: "Food", hints: ["sweet", "cocoa", "dessert", "bar"] },
+  { word: "coffee", category: "Drink", hints: ["caffeine", "brew", "roasted", "morning"] },
+  { word: "taco", category: "Food", hints: ["mexican", "shell", "filling", "spicy"] },
+  { word: "spaghetti", category: "Food", hints: ["pasta", "sauce", "noodles", "italian"] },
+  { word: "pancake", category: "Food", hints: ["breakfast", "syrup", "griddle", "batter"] },
+  { word: "smoothie", category: "Drink", hints: ["blended", "fruit", "refreshing", "straw"] },
+
+  // ── OBJECTS ──
+  { word: "camera", category: "Object", hints: ["photography", "lens", "shutter", "capture"] },
+  { word: "laptop", category: "Object", hints: ["computer", "portable", "keyboard", "screen"] },
+  { word: "guitar", category: "Object", hints: ["instrument", "strings", "acoustic", "melody"] },
+  { word: "telescope", category: "Object", hints: ["lenses", "astronomy", "vision", "distant"] },
+  { word: "bicycle", category: "Object", hints: ["vehicle", "wheels", "gears", "transport"] },
+  { word: "umbrella", category: "Object", hints: ["weather", "protection", "rain", "canopy"] },
+  { word: "lantern", category: "Object", hints: ["light", "oil", "glow", "burn"] },
+  { word: "compass", category: "Object", hints: ["navigation", "magnetic", "direction", "needle"] },
+
+  // ── PLACES & GEOGRAPHY ──
+  { word: "beach", category: "Location", hints: ["sand", "ocean", "tide", "shore"] },
+  { word: "jungle", category: "Location", hints: ["forest", "tropical", "wildlife", "dense"] },
+  { word: "library", category: "Location", hints: ["books", "quiet", "knowledge", "shelves"] },
+  { word: "hospital", category: "Location", hints: ["medical", "care", "treatment", "clinic"] },
+  { word: "tsunami", category: "Disaster", hints: ["wave", "flooding", "coastal", "impact"] },
+  { word: "volcano", category: "Geology", hints: ["eruption", "magma", "active", "mountain"] },
+  { word: "pyramid", category: "Landmark", hints: ["monument", "ancient", "tomb", "structure"] },
+  { word: "museum", category: "Location", hints: ["exhibition", "artifacts", "culture", "heritage"] },
+
+  // ── FANTASY & MYTHOLOGY ──
+  { word: "dragon", category: "Mythology", hints: ["creature", "fire", "scales", "legend"] },
+  { word: "wizard", category: "Fantasy", hints: ["magic", "spells", "staff", "mystical"] },
+  { word: "vampire", category: "Mythology", hints: ["undead", "fangs", "night", "blood"] },
+  { word: "mermaid", category: "Mythology", hints: ["ocean", "tail", "mythic", "scales"] },
+  { word: "zombie", category: "Mythology", hints: ["monster", "apocalypse", "undead", "brain"] },
+
+  // ── MISCELLANEOUS ──
+  { word: "rainbow", category: "Nature", hints: ["colors", "spectrum", "prism", "arc"] },
+  { word: "tornado", category: "Weather", hints: ["storm", "vortex", "wind", "funnel"] },
+  { word: "diamond", category: "Material", hints: ["gemstone", "expensive", "pressure", "sparkle"] },
+  { word: "magnet", category: "Science", hints: ["attraction", "polarity", "field", "force"] },
+  { word: "battery", category: "Object", hints: ["power", "energy", "charge", "cell"] },
+];
+
+export function getImposterCount(playerCount: number): number {
+  if (playerCount <= 5) return 1;
+  if (playerCount <= 9) return 2;
+  if (playerCount <= 14) return 3;
+  return 4;
+}
+
+export function pickRandomWord(): WordEntry {
   return WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
 }
