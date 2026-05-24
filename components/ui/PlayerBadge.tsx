@@ -1,4 +1,4 @@
-import { ShieldCheck, UserX, Crown } from "lucide-react";
+import { ShieldCheck, UserX, Crown, EyeOff } from "lucide-react";
 import { Player } from "@/lib/types";
 
 export function PlayerBadge({ 
@@ -68,9 +68,21 @@ export function PlayerBadge({
           </div>
         )}
         {showRole && player.role && (
-          <div className={`badge ${isImposter ? 'badge-red' : 'badge-cyan'}`} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {isImposter ? <UserX size={12} /> : <ShieldCheck size={12} />}
-            {isImposter ? "Imposter" : "Crewmate"}
+          <div className={`badge ${
+            player.role === 'imposter'
+              ? 'badge-red'
+              : player.role === 'undercover'
+                ? 'badge-amber'
+                : 'badge-cyan'
+          }`} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+            {player.role === 'imposter' ? (
+              <UserX size={12} />
+            ) : player.role === 'undercover' ? (
+              <EyeOff size={12} />
+            ) : (
+              <ShieldCheck size={12} />
+            )}
+            {player.role === 'imposter' ? "Imposter" : player.role === 'undercover' ? "Undercover" : "Crewmate"}
           </div>
         )}
       </div>

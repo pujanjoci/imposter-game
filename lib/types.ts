@@ -9,7 +9,8 @@ export type GamePhase =
   | "vote_phase"
   | "results";
 
-export type PlayerRole = "crewmate" | "imposter";
+export type PlayerRole = "crewmate" | "imposter" | "undercover";
+export type GameMode = "classic" | "hidden_words" | "undercover";
 
 export interface Player {
   id: string;
@@ -45,9 +46,11 @@ export interface Room {
   word: string | null;
   wordCategory: string | null;   // category of the secret word (e.g. "Disaster")
   imposterHints: Record<string, string>; // playerId -> hint string
+  playerWords: Record<string, string>; // playerId -> word shown to that player
   imposterIds: string[];
   imposterCount: number;
   manualImposterCount: number | null;
+  gameMode: GameMode;
   submissions: Submission[];
   votes: Vote[];
   imposterGuess: string | null;
@@ -55,6 +58,7 @@ export interface Room {
   result: GameResult | null;
   resultReason: string | null;
   roundNumber: number;
+  clueRound: number;
   // single device mode
   singleDeviceMode: boolean;
   singleDeviceTurn: number; // index into players array; whose role is being revealed
@@ -72,8 +76,10 @@ export interface RoomView {
   wordCategory: string | null;  // always visible (helps imposter blend)
   imposterHint: string | null;  // only for imposter (the one matching their ID)
   imposterIds: string[];        // revealed only in results
+  imposterWords: Record<string, string>; // revealed only in results for hidden word mode
   imposterCount: number;
   manualImposterCount: number | null;
+  gameMode: GameMode;
   submissions: Submission[];
   votes: Vote[];
   imposterGuess: string | null;
@@ -81,6 +87,7 @@ export interface RoomView {
   result: GameResult | null;
   resultReason: string | null;
   roundNumber: number;
+  clueRound: number;
   singleDeviceMode: boolean;
   singleDeviceTurn: number;
   updatedAt: number;

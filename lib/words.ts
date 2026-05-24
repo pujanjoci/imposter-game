@@ -80,3 +80,14 @@ export function getImposterCount(playerCount: number): number {
 export function pickRandomWord(): WordEntry {
   return WORD_BANK[Math.floor(Math.random() * WORD_BANK.length)];
 }
+
+export function pickDecoyWord(secretWord: string, category: string): WordEntry {
+  const sameCategory = WORD_BANK.filter(
+    (entry) => entry.category === category && entry.word !== secretWord
+  );
+  const pool = sameCategory.length > 0
+    ? sameCategory
+    : WORD_BANK.filter((entry) => entry.word !== secretWord);
+
+  return pool[Math.floor(Math.random() * pool.length)];
+}

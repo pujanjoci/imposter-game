@@ -1,3 +1,4 @@
+import type { GameMode } from "./types";
 import {
   createLocalRoom,
   startLocalGame,
@@ -22,9 +23,13 @@ export function isLocalRoom(code: string): boolean {
 /**
  * Creates a single device room entirely locally.
  */
-export async function createSingleDeviceRoomClient(playerNames: string[], manualImposterCount: number | null = null): Promise<{ code: string; playerIds: string[] }> {
+export async function createSingleDeviceRoomClient(
+  playerNames: string[],
+  manualImposterCount: number | null = null,
+  gameMode: GameMode = "classic"
+): Promise<{ code: string; playerIds: string[] }> {
   // We simulate an async API call but actually do it synchronously locally
-  const { room, playerIds } = createLocalRoom(playerNames, manualImposterCount);
+  const { room, playerIds } = createLocalRoom(playerNames, manualImposterCount, gameMode);
   return { code: room.code, playerIds };
 }
 

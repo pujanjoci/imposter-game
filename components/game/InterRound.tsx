@@ -7,6 +7,7 @@ import {
   Eye, EyeOff,
 } from "lucide-react";
 import { submitGuessClient, skipGuessClient } from "@/lib/api-client";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 export default function InterRound({
   room,
@@ -44,6 +45,8 @@ export default function InterRound({
   async function handleGuess(e: React.FormEvent) {
     e.preventDefault();
     if (!guess.trim() || loading) return;
+    triggerHaptic(HAPTICS.TAP);
+    playGameSound("TAP");
     setLoading("guess");
     try {
       await submitGuessClient(room.code, activePlayerId, guess.trim());
@@ -55,6 +58,8 @@ export default function InterRound({
   // ── Skip guess → go straight to vote/results phase ───────────────────────
   async function handleSkip() {
     if (loading) return;
+    triggerHaptic(HAPTICS.TAP);
+    playGameSound("TAP");
     setLoading("skip");
     try {
       await skipGuessClient(room.code, activePlayerId);
@@ -378,7 +383,7 @@ export default function InterRound({
         {loading === "skip" ? (
           <><Loader2 size={18} className="spinner" /> {isSingleDevice ? "Continuing…" : "Skipping…"}</>
         ) : (
-          <><SkipForward size={18} /> {isSingleDevice ? "Continue to Vote" : "Skip — Go to Vote"}</>
+          <><SkipForward size={18} /> {isSingleDevice ? "Continue to Reveal" : "Skip — Go to Vote"}</>
         )}
       </button>
     </div>

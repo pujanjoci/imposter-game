@@ -1,5 +1,6 @@
-import { Room, Player, RoomView, Vote } from "./types";
-import { pickRandomWord, getImposterCount } from "./words";
+import { Room, Player, RoomView } from "./types";
+import type { GameMode } from "./types";
+import { pickRandomWord, pickDecoyWord, getImposterCount } from "./words";
 
 const MIN_PLAYERS = 3;
 
@@ -60,9 +61,11 @@ function baseRoom(code: string): Omit<Room, "players"> {
     word: null,
     wordCategory: null,
     imposterHints: {},
+    playerWords: {},
     imposterIds: [],
     imposterCount: 0,
     manualImposterCount: null,
+    gameMode: "classic",
     submissions: [],
     votes: [],
     imposterGuess: null,
@@ -70,6 +73,7 @@ function baseRoom(code: string): Omit<Room, "players"> {
     result: null,
     resultReason: null,
     roundNumber: 1,
+    clueRound: 1,
     singleDeviceMode: true,
     singleDeviceTurn: 0,
     createdAt: Date.now(),
@@ -81,7 +85,11 @@ function baseRoom(code: string): Omit<Room, "players"> {
 // Public API for Local Game Engine
 // ---------------------------------------------------------------------------
 
-export function createLocalRoom(playerNames: string[], manualImposterCount: number | null = null): { room: Room; playerIds: string[] } {
+export function createLocalRoom(
+  playerNames: string[],
+  manualImposterCount: number | null = null,
+  gameMode: GameMode = "classic"
+): { room: Room; playerIds: string[] } {
   const code = generateCode();
   const playerIds: string[] = [];
 
@@ -95,6 +103,7 @@ export function createLocalRoom(playerNames: string[], manualImposterCount: numb
     ...baseRoom(code),
     players,
     manualImposterCount,
+    gameMode,
   };
 
   saveLocalRoomToStorage(room);
@@ -118,6 +127,7 @@ export function startLocalGame(code: string, requesterId: string): { error: stri
 }
 
 function beginRound(room: Room): void {
+  const gameMode = room.gameMode ?? "classic";
   const count = room.manualImposterCount ?? getImposterCount(room.players.length);
   room.imposterCount = count;
 
@@ -126,20 +136,47 @@ function beginRound(room: Room): void {
   const selectedImposters = shuffled.slice(0, count);
   room.imposterIds = selectedImposters.map((p) => p.id);
 
+  let undercoverId = "";
+  if (gameMode === "undercover") {
+    const nonImposters = shuffled.slice(count);
+    if (nonImposters.length > 0) {
+      undercoverId = nonImposters[0].id;
+    }
+  }
+
   const { word, category, hints } = pickRandomWord();
   room.word = word;
   room.wordCategory = category;
+  room.playerWords = {};
 
   // Assign a unique hint to each imposter
   room.imposterHints = {};
   const shuffledHints = [...hints].sort(() => Math.random() - 0.5);
+  const decoy = (gameMode === "hidden_words" || gameMode === "undercover") ? pickDecoyWord(word, category) : null;
   selectedImposters.forEach((p, i) => {
+    if (gameMode === "hidden_words" && decoy) {
+      room.playerWords[p.id] = decoy.word;
+      return;
+    }
     room.imposterHints[p.id] = shuffledHints[i % shuffledHints.length];
   });
 
   room.players.forEach((p) => {
     p.isReady = false;
-    p.role = room.imposterIds.includes(p.id) ? "imposter" : "crewmate";
+    if (room.imposterIds.includes(p.id)) {
+      p.role = "imposter";
+      if (gameMode === "classic" || gameMode === "undercover") {
+        room.playerWords[p.id] = "";
+      }
+    } else if (p.id === undercoverId) {
+      p.role = "undercover";
+      if (decoy) {
+        room.playerWords[p.id] = decoy.word;
+      }
+    } else {
+      p.role = "crewmate";
+      room.playerWords[p.id] = word;
+    }
     p.clue = null;
     p.vote = null;
     p.skippedVote = false;
@@ -151,6 +188,7 @@ function beginRound(room: Room): void {
   room.imposterGuessCorrect = null;
   room.result = null;
   room.resultReason = null;
+  room.clueRound = 1;
   room.phase = "role_reveal";
   room.singleDeviceTurn = 0;
 }
@@ -184,7 +222,7 @@ export function advanceLocalToInterRound(code: string): { error: string } | null
   if (!room) return { error: "Room not found locally" };
   if (room.phase !== "clue_phase") return { error: "Wrong phase" };
 
-  room.phase = "inter_round";
+  room.phase = room.gameMode === "hidden_words" ? "results" : "inter_round";
   saveLocalRoomToStorage(room);
   broadcast(code);
   return null;
@@ -194,6 +232,7 @@ export function submitLocalGuess(code: string, playerId: string, guess: string):
   const room = getLocalRoomFromStorage(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
+  if (room.gameMode === "hidden_words") return { error: "Guessing is disabled in hidden word mode" };
   if (!room.imposterIds.includes(playerId)) return { error: "Only the imposter can guess" };
 
   const trimmed = guess.trim();
@@ -222,6 +261,7 @@ export function skipLocalGuess(code: string, playerId: string): { error: string 
   const room = getLocalRoomFromStorage(code);
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
+  if (room.gameMode === "hidden_words") return { error: "Guessing is disabled in hidden word mode" };
   if (!room.imposterIds.includes(playerId)) return { error: "Only the imposter can skip" };
 
   room.imposterGuess = null;
@@ -264,11 +304,16 @@ export function submitLocalVote(code: string, voterId: string, targetId: string 
 
 function resolveLocalVotes(room: Room): void {
   const voteCounts: Record<string, number> = {};
+  let skipCount = 0;
   room.votes.forEach(v => {
-    if (v.targetId !== "skip") {
+    if (v.targetId === "skip") {
+      skipCount++;
+    } else {
       voteCounts[v.targetId] = (voteCounts[v.targetId] || 0) + 1;
     }
   });
+
+  const totalRealVotes = room.players.length - skipCount;
 
   let mostVotedId = "";
   let maxVotes = 0;
@@ -279,16 +324,54 @@ function resolveLocalVotes(room: Room): void {
     }
   }
 
-  if (!mostVotedId) return;
+  // Check for a tie among real votes
+  const topCount = Object.values(voteCounts).filter((c) => c === maxVotes).length;
+  const isTie = topCount > 1;
+
+  const isSkippedOrTied = totalRealVotes === 0 || isTie || skipCount >= maxVotes || maxVotes === 0;
+
+  if (isSkippedOrTied) {
+    if (!room.clueRound) room.clueRound = 1;
+    if (room.clueRound < 3) {
+      room.clueRound += 1;
+      room.result = null;
+      room.resultReason =
+        (totalRealVotes === 0 || skipCount >= maxVotes)
+          ? `Vote skipped! Submit another clue for this round (Round ${room.clueRound} of 3).`
+          : `Vote tied! Submit another clue for this round (Round ${room.clueRound} of 3).`;
+      room.phase = "clue_phase";
+      
+      // Reset clues and votes
+      room.submissions = [];
+      room.votes = [];
+      room.players.forEach((p) => {
+        p.clue = null;
+        p.vote = null;
+        p.skippedVote = false;
+      });
+      return;
+    } else {
+      // Already did 3 rounds of clues, end the round with no winner
+      room.result = null;
+      room.resultReason = "No one was eliminated after 3 rounds of clues!";
+      room.phase = "results";
+      return;
+    }
+  }
 
   const mostVotedPlayer = room.players.find((p) => p.id === mostVotedId);
+  const isTargetImposterOrUndercover = room.imposterIds.includes(mostVotedId) || mostVotedPlayer?.role === "undercover";
 
-  if (room.imposterIds.includes(mostVotedId)) {
+  if (isTargetImposterOrUndercover) {
     room.result = "players_win";
-    room.resultReason = `Crewmates correctly voted out an Imposter: ${mostVotedPlayer?.name}!`;
+    room.resultReason = room.gameMode === "undercover"
+      ? `Crewmates correctly voted out the ${mostVotedPlayer?.role === "imposter" ? "Imposter" : "Undercover"}: ${mostVotedPlayer?.name}!`
+      : `Crewmates correctly voted out an Imposter: ${mostVotedPlayer?.name}!`;
   } else {
     room.result = "imposter_wins";
-    room.resultReason = `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposters survive.`;
+    room.resultReason = room.gameMode === "undercover"
+      ? `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposter & Undercover win.`
+      : `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposters survive.`;
   }
 }
 
@@ -297,8 +380,9 @@ export function revealLocalImposter(code: string): { error: string } | null {
   if (!room) return { error: "Room not found" };
   if (room.phase !== "results") return { error: "Wrong phase" };
   
+  const specialPlayers = room.players.filter(p => room.imposterIds.includes(p.id) || p.role === "undercover");
   room.result = "players_win";
-  room.resultReason = `The Imposters were ${room.players.filter(p => room.imposterIds.includes(p.id)).map(p => p.name).join(", ")}!`;
+  room.resultReason = `The special players were: ${specialPlayers.map(p => `${p.name} (${p.role === "imposter" ? "Imposter" : "Undercover"})`).join(", ")}!`;
 
   saveLocalRoomToStorage(room);
   broadcast(code);
@@ -326,6 +410,8 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
 
   const isImposter = room.imposterIds.includes(playerId);
   const isResultsPhase = room.phase === "results";
+  const gameMode = room.gameMode ?? "classic";
+  const playerWords = room.playerWords ?? {};
   
   const isSingleDevice = room.singleDeviceMode;
   const activePlayer = isSingleDevice ? room.players[room.singleDeviceTurn] : null;
@@ -335,22 +421,26 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
     ? activeSingleDevicePlayerId
     : playerId;
   const effectiveIsImposter = room.imposterIds.includes(effectivePlayerId);
+  const effectivePlayer = room.players.find(p => p.id === effectivePlayerId);
+  const effectiveIsUndercover = effectivePlayer?.role === "undercover";
+  
+  const visibleWord = gameMode === "hidden_words"
+    ? playerWords[effectivePlayerId] || room.word
+    : gameMode === "undercover"
+      ? (effectiveIsImposter ? null : (effectiveIsUndercover ? playerWords[effectivePlayerId] : room.word))
+      : (effectiveIsImposter ? null : room.word);
 
   return {
     code: room.code,
     players: room.players.map((p) => ({
       ...p,
       role: isResultsPhase
-        ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
+        ? p.role
         : isSingleDevice && room.phase === "role_reveal"
-          ? (p.id === activeSingleDevicePlayerId
-              ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
-              : undefined)
+          ? (p.id === activeSingleDevicePlayerId ? p.role : undefined)
           : isSingleDevice
-            ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
-            : p.id === playerId
-              ? (room.imposterIds.includes(p.id) ? "imposter" : "crewmate")
-              : undefined,
+            ? p.role
+            : p.id === playerId ? p.role : undefined,
       clue: p.clue ?? null,
       vote: p.vote ?? null,
       skippedVote: p.skippedVote ?? false,
@@ -358,16 +448,28 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
     phase: room.phase,
     word: isResultsPhase
       ? room.word
+      : (gameMode === "hidden_words" || gameMode === "undercover")
+        ? visibleWord
       : isSingleDevice && room.phase === "role_reveal"
         ? (effectiveIsImposter ? null : room.word)
         : (isSingleDevice
           ? room.word
           : (isImposter ? null : room.word)),
     wordCategory: room.wordCategory,
-    imposterHint: room.imposterHints[playerId] || (isSingleDevice ? room.imposterHints[activeSingleDevicePlayerId] : null),
+    imposterHint: (gameMode === "hidden_words" || gameMode === "undercover" && !effectiveIsImposter)
+      ? null
+      : room.imposterHints[playerId] || (isSingleDevice ? room.imposterHints[activeSingleDevicePlayerId] : null),
     imposterIds: isResultsPhase ? room.imposterIds : [],
+    imposterWords: isResultsPhase && (gameMode === "hidden_words" || gameMode === "undercover")
+      ? Object.fromEntries(
+          room.players
+            .filter(p => room.imposterIds.includes(p.id) || p.role === "undercover")
+            .map((p) => [p.id, playerWords[p.id] || ""])
+        )
+      : {},
     imposterCount: room.imposterCount,
     manualImposterCount: room.manualImposterCount,
+    gameMode,
     submissions: room.submissions,
     votes: room.votes,
     imposterGuess: room.imposterGuess,
@@ -375,6 +477,7 @@ export function getLocalRoomView(code: string, playerId: string): RoomView | nul
     result: room.result,
     resultReason: room.resultReason,
     roundNumber: room.roundNumber,
+    clueRound: room.clueRound,
     singleDeviceMode: room.singleDeviceMode,
     singleDeviceTurn: room.singleDeviceTurn,
     updatedAt: room.updatedAt,

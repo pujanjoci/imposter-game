@@ -1,11 +1,11 @@
 "use client";
 
-import { RoomView } from "@/lib/types";
+import type { Player, RoomView } from "@/lib/types";
 import { useState, useEffect } from "react";
 import {
   UserX, ShieldCheck, Loader2, Sparkles, Crown,
-  CheckCircle2, XCircle, SkipForward, Users, Eye, Tag,
-  BookOpen,
+  CheckCircle2, XCircle, Users, Eye, Tag,
+  BookOpen, Scale, AlertCircle, Trophy,
 } from "lucide-react";
 import { nextRoundClient } from "@/lib/api-client";
 import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
@@ -26,21 +26,24 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
       triggerHaptic(HAPTICS.WINNER);
       playGameSound("WINNER");
     }
-  }, []);
+  }, [room.singleDeviceMode]);
 
   const me = room.players.find((p) => p.id === playerId);
   if (!me) return null;
 
   const imposterWon = room.result === "imposter_wins";
   const isTieOrSkip = room.result === null;
+  const isHiddenWords = room.gameMode === "hidden_words";
   const imposterPlayers = room.players.filter((p) => room.imposterIds.includes(p.id));
+  const undercoverPlayers = room.players.filter((p) => p.role === "undercover");
+  const imposterWordList = Object.entries(room.imposterWords).filter(([, word]) => word);
 
   async function handleNextRound() {
     setLoading(true);
     try {
       await nextRoundClient(room.code, playerId);
-    } catch (err: any) {
-      console.error("[next-round]", err.message);
+    } catch (err: unknown) {
+      console.error("[next-round]", err instanceof Error ? err.message : err);
     } finally {
       setLoading(false);
     }
@@ -74,7 +77,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 marginBottom: "1.25rem",
                 boxShadow: "0 0 48px var(--primary-glow)",
               }}>
-                <Crown size={36} />
+                <Trophy size={36} />
               </div>
               <h2 style={{
                 fontSize: "1.75rem",
@@ -92,7 +95,9 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 fontSize: "0.95rem",
                 fontWeight: 500,
               }}>
-                Everyone has submitted their clues. Time to vote and reveal the imposter!
+                {isHiddenWords
+                  ? "Everyone has shared their clues. Time to reveal who had the odd word."
+                  : "Everyone has submitted their clues. Time to vote and reveal the imposter!"}
               </p>
               {room.resultReason && (
                 <div style={{
@@ -159,7 +164,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               marginBottom: "1.5rem",
               fontStyle: "italic",
             }}>
-              Discuss the clues, then press the button to reveal who the {room.imposterCount > 1 ? "imposters were" : "imposter was"}!
+              Discuss the clues, then press the button to reveal who the {isHiddenWords ? "imposter was" : room.imposterCount > 1 ? "imposters were" : "imposter was"}!
             </p>
 
             <button
@@ -176,7 +181,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                 fontSize: "1rem",
               }}
             >
-              <Eye size={20} /> Reveal the {room.imposterCount > 1 ? "Imposters" : "Imposter"}!
+              <Eye size={20} /> Reveal the {isHiddenWords ? "Imposter" : room.imposterCount > 1 ? "Imposters" : "Imposter"}!
             </button>
           </>
         ) : (
@@ -193,20 +198,37 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
             }}>
               <UserX size={52} style={{ color: "var(--danger)", marginBottom: "0.75rem" }} />
               <div style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--danger)", fontWeight: 800, marginBottom: "0.5rem" }}>
-                The {room.imposterCount > 1 ? "Imposters Were" : "Imposter Was"}…
+                {room.gameMode === "undercover"
+                  ? "The Imposter & Undercover Were..."
+                  : isHiddenWords
+                    ? "The Imposter Was..."
+                    : room.imposterCount > 1
+                      ? "The Imposters Were..."
+                      : "The Imposter Was..."}
               </div>
               <div style={{
-                fontSize: "2.25rem",
+                fontSize: "2rem",
                 fontWeight: 900,
                 color: "#fff",
                 letterSpacing: "-0.02em",
-                lineHeight: 1,
+                lineHeight: 1.2,
                 marginBottom: "0.5rem",
               }}>
-                {pluralizeImposterNames(imposterPlayers)}
+                {room.gameMode === "undercover" ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", fontSize: "1.5rem" }}>
+                    <div>Imposter: <span style={{ color: "var(--danger)" }}>{pluralizeImposterNames(imposterPlayers)}</span></div>
+                    {undercoverPlayers.length > 0 && (
+                      <div>Undercover: <span style={{ color: "var(--warning)" }}>{pluralizeImposterNames(undercoverPlayers)}</span></div>
+                    )}
+                  </div>
+                ) : pluralizeImposterNames(imposterPlayers)}
               </div>
               <div style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>
-                {room.imposterCount > 1 ? "were blending in all along!" : "was blending in all along!"}
+                {room.gameMode === "undercover"
+                  ? "blended in all along!"
+                  : room.imposterCount > 1
+                    ? "were blending in all along!"
+                    : "was blending in all along!"}
               </div>
             </div>
 
@@ -250,6 +272,24 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               }}>
                 {room.word}
               </div>
+              {(isHiddenWords || room.gameMode === "undercover") && imposterWordList.length > 0 && (
+                <div style={{
+                  marginTop: "0.75rem",
+                  marginBottom: "0.75rem",
+                  padding: "0.75rem 1rem",
+                  background: "rgba(245,158,11,0.08)",
+                  border: "1px dashed rgba(245,158,11,0.25)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-2)",
+                  fontSize: "0.9rem",
+                  fontWeight: 600,
+                }}>
+                  {room.gameMode === "undercover" ? "Undercover decoy word: " : "Odd word: "}
+                  <span style={{ color: "var(--warning)", fontWeight: 800 }}>
+                    {imposterWordList.map(([, word]) => word).join(", ")}
+                  </span>
+                </div>
+              )}
               {/* Imposter's hint */}
               {room.imposterHint && (
                 <div style={{
@@ -263,7 +303,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
                     {room.imposterCount > 1 ? "Your Hint Was" : "Imposter's Hint Was"}
                   </div>
                   <div style={{ fontSize: "0.9rem", color: "var(--text-2)", fontWeight: 500, lineHeight: 1.4 }}>
-                    "{room.imposterHint}"
+                    &quot;{room.imposterHint}&quot;
                   </div>
                 </div>
               )}
@@ -345,7 +385,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
     );
   }
 
-  function pluralizeImposterNames(imposters: any[]) {
+  function pluralizeImposterNames(imposters: Player[]) {
     if (imposters.length === 0) return "Unknown";
     if (imposters.length === 1) return imposters[0].name;
     if (imposters.length === 2) return `${imposters[0].name} and ${imposters[1].name}`;
@@ -368,13 +408,13 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
       ? "var(--danger-glow)"
       : "var(--success-glow, rgba(34,197,94,0.3))";
 
-  const HeaderIcon = isTieOrSkip ? SkipForward : imposterWon ? UserX : ShieldCheck;
+  const HeaderIcon = isTieOrSkip ? Scale : imposterWon ? UserX : ShieldCheck;
 
   const headline = isTieOrSkip
     ? "NO WINNER"
     : imposterWon
-      ? (room.imposterCount > 1 ? "IMPOSTERS WIN!" : "IMPOSTER WINS!")
-      : "CREWMATES WIN!";
+      ? (room.gameMode === "undercover" ? "IMPOSTER & UNDERCOVER WIN!" : room.imposterCount > 1 ? "IMPOSTERS WIN!" : "IMPOSTER WINS!")
+      : (room.gameMode === "undercover" ? "CREWMATES WIN!" : isHiddenWords ? "PLAYERS WIN!" : "CREWMATES WIN!");
 
   return (
     <div
@@ -448,12 +488,20 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
           )}
           <p style={{ color: "var(--text-3)", fontSize: "0.9rem", margin: 0 }}>
             The secret word was{" "}
-            <span style={{ color: "var(--primary)", fontWeight: 800 }}>"{room.word}"</span>
+            <span style={{ color: "var(--primary)", fontWeight: 800 }}>&quot;{room.word}&quot;</span>
           </p>
         </div>
+        {(isHiddenWords || room.gameMode === "undercover") && imposterWordList.length > 0 && (
+          <div style={{ marginTop: "0.6rem", color: "var(--text-3)", fontSize: "0.9rem" }}>
+            {room.gameMode === "undercover" ? "Undercover decoy word: " : "Odd word: "}
+            <span style={{ color: "var(--warning)", fontWeight: 800 }}>
+              &quot;{imposterWordList.map(([, word]) => word).join(", ")}&quot;
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* ── Imposter reveal ── */}
+      {/* ── Imposter/Special reveal ── */}
       <div
         className="anim-slide-up"
         style={{
@@ -482,7 +530,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
         >
           <UserX size={18} color="#fff" />
         </div>
-        <div>
+        <div style={{ flex: 1 }}>
           <div
             style={{
               fontSize: "0.75rem",
@@ -493,10 +541,19 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               marginBottom: "0.2rem",
             }}
           >
-            The {room.imposterCount > 1 ? "Imposters" : "Imposter"}
+            {room.gameMode === "undercover" ? "Imposter & Undercover" : isHiddenWords ? "The Imposter" : room.imposterCount > 1 ? "The Imposters" : "The Imposter"}
           </div>
           <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--text-1)" }}>
-            {pluralizeImposterNames(imposterPlayers)}
+            {room.gameMode === "undercover" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.95rem" }}>
+                <div>Imposter: <span style={{ color: "var(--danger)", fontWeight: 700 }}>{pluralizeImposterNames(imposterPlayers)}</span></div>
+                {undercoverPlayers.length > 0 && (
+                  <div>Undercover: <span style={{ color: "var(--warning)", fontWeight: 700 }}>{pluralizeImposterNames(undercoverPlayers)}</span></div>
+                )}
+              </div>
+            ) : (
+              pluralizeImposterNames(imposterPlayers)
+            )}
           </div>
         </div>
       </div>
@@ -526,7 +583,7 @@ export default function Results({ room, playerId, onPlayAgain }: ResultsProps) {
               {room.imposterCount > 1 ? "Your Hint Was" : "Imposter's Hint Was"}
             </div>
             <div style={{ fontSize: "0.92rem", fontWeight: 500, color: "var(--text-2)", lineHeight: 1.4 }}>
-              "{room.imposterHint}"
+              &quot;{room.imposterHint}&quot;
             </div>
           </div>
         </div>

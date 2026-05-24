@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createSingleDeviceRoomClient } from "@/lib/api-client";
+import type { GameMode } from "@/lib/types";
 import {
   UserSearch, Home, Link2, ArrowRight, Loader2,
   Smartphone, Users, Plus, Trash2, ChevronRight,
+  Shuffle, Shield, Fingerprint, EyeOff,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -20,6 +22,7 @@ export default function HomePage() {
   const [singleDevice, setSingleDevice] = useState(false);
   const [sdPlayers, setSdPlayers] = useState<string[]>(["", "", ""]);
   const [manualImposterCount, setManualImposterCount] = useState<number | null>(null);
+  const [gameMode, setGameMode] = useState<GameMode>("classic");
 
   // Auto-fill room code from ?code= URL param (supports mobile share links)
   useEffect(() => {
@@ -42,7 +45,8 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           hostName: name.trim(),
-          manualImposterCount 
+          manualImposterCount,
+          gameMode,
         }),
       });
       const data = await res.json();
@@ -89,7 +93,7 @@ export default function HomePage() {
     setLoading(true);
     setError("");
     try {
-      const data = await createSingleDeviceRoomClient(names, manualImposterCount);
+      const data = await createSingleDeviceRoomClient(names, manualImposterCount, gameMode);
       localStorage.setItem(`player_${data.code}`, data.playerIds[0]);
       localStorage.setItem(`sdPlayers_${data.code}`, JSON.stringify(data.playerIds));
       router.push(`/room/${data.code}`);
@@ -127,7 +131,7 @@ export default function HomePage() {
           zIndex: 0,
           pointerEvents: "none",
           background:
-            "radial-gradient(ellipse 60% 50% at 50% 0%, rgba(139,92,246,0.12) 0%, transparent 70%)",
+            "linear-gradient(180deg, rgba(34,211,238,0.08) 0%, rgba(139,92,246,0.04) 34%, transparent 68%)",
         }}
       />
 
@@ -261,7 +265,7 @@ export default function HomePage() {
                     </h2>
                   </div>
                   <p style={{ fontSize: "0.85rem", color: "var(--text-3)", lineHeight: 1.5 }}>
-                    All players on one phone. Each player will get 2 seconds to view their role privately, then pass the phone. No voting screen — a host reveals the imposter at the end.
+                    All players on one phone. Each player privately views their {gameMode === "hidden_words" ? "word" : "role"}, then passes the phone. No voting screen - reveal at the end.
                   </p>
                 </div>
 
@@ -380,6 +384,49 @@ export default function HomePage() {
                   </label>
                   
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", background: "var(--bg-base)", padding: "3px", borderRadius: "8px" }}>
+                        {([
+                          ["classic", "Classic"],
+                          ["hidden_words", "Mystery Word"],
+                          ["undercover", "Undercover"],
+                        ] as const).map(([mode, label]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setGameMode(mode)}
+                            style={{
+                              padding: "0.45rem 0.5rem",
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              borderRadius: "6px",
+                              border: "none",
+                              cursor: "pointer",
+                              transition: "all 0.1s",
+                              background: gameMode === mode ? "var(--primary)" : "transparent",
+                              color: gameMode === mode ? "#fff" : "var(--text-3)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "0.2rem",
+                            }}
+                          >
+                            {mode === "classic" && <Shield size={11} />}
+                            {mode === "hidden_words" && <Fingerprint size={11} />}
+                            {mode === "undercover" && <EyeOff size={11} />}
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p style={{ color: "var(--text-3)", fontSize: "0.78rem", lineHeight: 1.4 }}>
+                        {gameMode === "hidden_words"
+                          ? "No role labels. One player (the Imposter) sees a decoy word."
+                          : gameMode === "undercover"
+                            ? "3 Roles: Crew (Word A), Undercover (Word B), Imposter (No word, only hint)."
+                            : "Imposters know their role and get a hint instead of the word."}
+                      </p>
+                    </div>
+
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <span style={{ fontSize: "0.85rem", color: "var(--text-2)", fontWeight: 500 }}>Imposter Count</span>
                       <div style={{ display: "flex", gap: "4px", background: "var(--bg-base)", padding: "3px", borderRadius: "8px" }}>
@@ -559,7 +606,44 @@ export default function HomePage() {
                     {/* ── Multiplayer Creation Setting ── */}
                     {tab === "create" && (
                       <div style={{ marginBottom: "0.5rem", padding: "0.75rem", background: "rgba(255,255,255,0.02)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+                            <span style={{ fontSize: "0.8rem", color: "var(--text-3)", fontWeight: 600 }}>Game Mode</span>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "3px", background: "var(--bg-base)", padding: "2px", borderRadius: "6px" }}>
+                              {([
+                                ["classic", "Classic"],
+                                ["hidden_words", "Mystery Word"],
+                                ["undercover", "Undercover"],
+                              ] as const).map(([mode, label]) => (
+                                <button
+                                  key={`multi-mode-${mode}`}
+                                  type="button"
+                                  onClick={() => setGameMode(mode)}
+                                  style={{
+                                    padding: "0.45rem 0.5rem",
+                                    fontSize: "0.68rem",
+                                    fontWeight: 700,
+                                    borderRadius: "4px",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    background: gameMode === mode ? "var(--primary)" : "transparent",
+                                    color: gameMode === mode ? "#fff" : "var(--text-3)",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: "0.15rem",
+                                  }}
+                                >
+                                  {mode === "classic" && <Shield size={10} />}
+                                  {mode === "hidden_words" && <Fingerprint size={10} />}
+                                  {mode === "undercover" && <EyeOff size={10} />}
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                           <span style={{ fontSize: "0.8rem", color: "var(--text-3)", fontWeight: 600 }}>Imposter Count</span>
                           <div style={{ display: "flex", gap: "2px", background: "var(--bg-base)", padding: "2px", borderRadius: "6px" }}>
                             {[null, 1, 2, 3].map((val) => (
@@ -581,6 +665,7 @@ export default function HomePage() {
                                 {val === null ? "Auto" : val}
                               </button>
                             ))}
+                          </div>
                           </div>
                         </div>
                       </div>
@@ -632,7 +717,7 @@ export default function HomePage() {
             }}
           >
             {singleDevice
-              ? "Pass the phone around — each player sees their role privately"
+              ? `Pass the phone around - each player sees their ${gameMode === "hidden_words" ? "word" : "role"} privately`
               : "3–20 players · No account needed · Instant rooms"}
           </p>
 

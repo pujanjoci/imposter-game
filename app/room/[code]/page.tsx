@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useRoom } from "@/hooks/useRoom";
 import Lobby from "@/components/game/Lobby";
@@ -10,8 +9,8 @@ import InterRound from "@/components/game/InterRound";
 import VotePhase from "@/components/game/VotePhase";
 import Results from "@/components/game/Results";
 import {
-  Activity, AlertCircle, LogOut, Check,
-  Search, ShieldAlert, Sparkles, Crown, UserSearch, Swords, Home, Smartphone,
+  Users, Eye, MessageSquare, Target, Skull, Trophy, Check,
+  AlertCircle, LogOut, Smartphone, Home, ShieldAlert, UserSearch, Crown,
 } from "lucide-react";
 
 const PHASE_STEPS = [
@@ -23,12 +22,27 @@ const PHASE_STEPS = [
   { key: "results",     label: "Results" },
 ];
 
+const HIDDEN_PHASE_STEPS = [
+  { key: "lobby",       label: "Lobby" },
+  { key: "role_reveal", label: "Word" },
+  { key: "clue_phase",  label: "Clues" },
+  { key: "vote_phase",  label: "Vote" },
+  { key: "results",     label: "Reveal" },
+];
+
 // Single-device mode skips the vote phase
 const SD_PHASE_STEPS = [
   { key: "lobby",       label: "Lobby" },
   { key: "role_reveal", label: "Roles" },
   { key: "clue_phase",  label: "Clues" },
   { key: "inter_round", label: "Guess?" },
+  { key: "results",     label: "Reveal" },
+];
+
+const SD_HIDDEN_PHASE_STEPS = [
+  { key: "lobby",       label: "Lobby" },
+  { key: "role_reveal", label: "Words" },
+  { key: "clue_phase",  label: "Clues" },
   { key: "results",     label: "Reveal" },
 ];
 
@@ -148,7 +162,10 @@ export default function RoomPage() {
   }
 
   const isSingleDevice = room.singleDeviceMode;
-  const phaseSteps = isSingleDevice ? SD_PHASE_STEPS : PHASE_STEPS;
+  const isHiddenWords = room.gameMode === "hidden_words";
+  const phaseSteps = isHiddenWords
+    ? (isSingleDevice ? SD_HIDDEN_PHASE_STEPS : HIDDEN_PHASE_STEPS)
+    : (isSingleDevice ? SD_PHASE_STEPS : PHASE_STEPS);
   const currentPhaseIndex = phaseSteps.findIndex((s) => s.key === room.phase);
 
   // In single-device mode, use the host player always for all non-role-reveal actions
@@ -172,7 +189,7 @@ export default function RoomPage() {
           pointerEvents: "none",
           zIndex: 0,
           background:
-            "radial-gradient(ellipse 80% 40% at 50% 0%, rgba(139,92,246,0.08) 0%, transparent 60%)",
+            "linear-gradient(180deg, rgba(34,211,238,0.06) 0%, rgba(139,92,246,0.03) 36%, transparent 72%)",
         }}
       />
 
@@ -358,12 +375,12 @@ export default function RoomPage() {
               gap: "0.5rem",
             }}
           >
-            {room.phase === "lobby"       && <><Home size={18} /> Game Lobby</>}
-            {room.phase === "role_reveal" && <><Search size={18} /> Your Role</>}
-            {room.phase === "clue_phase"  && <><Sparkles size={18} /> Submit a Clue</>}
-            {room.phase === "inter_round" && <><Swords size={18} /> Imposter&apos;s Chance</>}
-            {room.phase === "vote_phase"  && <><Activity size={18} /> Voting Time</>}
-            {room.phase === "results"     && <><Crown size={18} /> Round Over</>}
+            {room.phase === "lobby"       && <><Users size={18} /> Game Lobby</>}
+            {room.phase === "role_reveal" && <><Eye size={18} /> {isHiddenWords ? "Your Word" : "Your Role"}</>}
+            {room.phase === "clue_phase"  && <><MessageSquare size={18} /> Clue Phase</>}
+            {room.phase === "inter_round" && <><Target size={18} /> Imposter&apos;s Chance</>}
+            {room.phase === "vote_phase"  && <><Skull size={18} /> Voting Time</>}
+            {room.phase === "results"     && <><Trophy size={18} /> Round Over</>}
           </h1>
         </div>
 

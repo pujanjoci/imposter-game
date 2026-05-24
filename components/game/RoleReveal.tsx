@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { RoomView } from "@/lib/types";
 import { advanceSingleDeviceTurnClient } from "@/lib/api-client";
-import { Eye, EyeOff, Loader2, Sparkles, UserX, ShieldCheck, Tag, ChevronRight } from "lucide-react";
+import { EyeOff, Loader2, Sparkles, UserX, ShieldCheck, Tag, Eye } from "lucide-react";
 import { PlayerBadge } from "@/components/ui/PlayerBadge";
 import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
@@ -19,19 +19,10 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
 
   const me = room.players.find((p) => p.id === playerId);
   const isSingleDevice = room.singleDeviceMode;
+  const isHiddenWords = room.gameMode === "hidden_words";
 
   // In single-device mode, the active player being shown role
   const activeSdPlayer = isSingleDevice ? room.players[room.singleDeviceTurn] : null;
-  const isMyTurn = isSingleDevice ? activeSdPlayer?.id === playerId : true;
-
-  // Derive role/word from the active player in single-device mode
-  // The server already sends the correct role/word for the active player
-  const activeRole = isSingleDevice
-    ? (activeSdPlayer?.id === room.players.find(p => p.id === room.players[room.singleDeviceTurn]?.id)?.id
-        ? activeSdPlayer?.role
-        : undefined)
-    : me?.role;
-
   // In single-device mode, the role shown is for the active turn player
   const displayRole = isSingleDevice ? activeSdPlayer?.role : me?.role;
   const displayWord = room.word; // null for imposter (handled server-side)
@@ -88,17 +79,19 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
       return (
         <div className="card anim-scale-in" style={{ maxWidth: 460, margin: "0 auto", textAlign: "center", padding: "3rem 2rem" }}>
           <h2 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: "1rem", color: "var(--text-1)" }}>
-            {isLastPlayer ? "All Roles Revealed!" : `Pass to ${nextPlayer?.name}`}
+            {isLastPlayer ? (isHiddenWords ? "All Words Revealed!" : "All Roles Revealed!") : `Pass to ${nextPlayer?.name}`}
           </h2>
           <p style={{ color: "var(--text-3)", marginBottom: "2.5rem", fontSize: "1rem" }}>
-            {isLastPlayer ? "Everyone should know their role. Ready to figure out the imposter?" : `Make sure ${nextPlayer?.name} is holding the device before continuing.`}
+            {isLastPlayer
+              ? (isHiddenWords ? "Everyone has seen their word. Start the clues and watch for the odd one out." : "Everyone should know their role. Ready to figure out the imposter?")
+              : `Make sure ${nextPlayer?.name} is holding the device before continuing.`}
           </p>
           <button
             className="btn btn-primary btn-full btn-lg"
             onClick={handleSingleDeviceNext}
             disabled={loading}
           >
-            {loading ? <Loader2 className="spinner" /> : isLastPlayer ? "Start Game" : `I am ${nextPlayer?.name}`}
+            {loading ? <Loader2 className="spinner" /> : isLastPlayer ? "Start Discussion" : `I am ${nextPlayer?.name}`}
           </button>
         </div>
       );
@@ -156,12 +149,21 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
             {currentPlayer?.name}&apos;s Turn
           </h2>
           <p style={{ marginTop: "0.4rem", color: "var(--text-3)", fontSize: "0.9rem" }}>
-            {showRole ? "Remember your role!" : "Tap the card to reveal your role. Hide the screen from others!"}
+            {showRole
+              ? (isHiddenWords ? "Remember your word!" : "Remember your role!")
+              : `Tap the card to reveal your ${isHiddenWords ? "word" : "role"}. Hide the screen from others!`}
           </p>
         </div>
 
-        {/* Role Card */}
+        {/* ── Role Card (3D perspective flip) ── */}
         <div
+          className="perspective-1000"
+          style={{
+            width: "100%",
+            height: 320,
+            margin: "0 auto 1.5rem auto",
+            cursor: showRole ? "default" : "pointer",
+          }}
           onClick={() => {
             if (!showRole) {
               triggerHaptic(HAPTICS.REVEAL);
@@ -169,97 +171,145 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
               setShowRole(true);
             }
           }}
-          className="hover-lift"
-          style={{
-            background: showRole
-              ? displayRole === "imposter" ? "var(--danger-dim)" : "var(--primary-dim)"
-              : "var(--bg-elevated)",
-            border: `1px solid ${showRole
-              ? displayRole === "imposter" ? "rgba(244,63,94,0.3)" : "rgba(139,92,246,0.3)"
-              : "var(--border)"}`,
-            borderRadius: "var(--radius-xl)",
-            padding: "2.5rem 1.5rem",
-            cursor: showRole ? "default" : "pointer",
-            marginBottom: "1.5rem",
-            transition: "all var(--dur-med) var(--ease-spring)",
-            boxShadow: showRole
-              ? displayRole === "imposter" ? "0 8px 32px var(--danger-glow)" : "0 8px 32px var(--primary-glow)"
-              : "none",
-          }}
         >
-          {!showRole ? (
-            <div className="anim-fade-in" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", color: "var(--text-3)" }}>
-              <EyeOff size={48} />
-              <span style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>Tap to Reveal</span>
+          <div className={`card-inner ${showRole ? "card-flipped" : ""}`} style={{ width: "100%", height: "100%" }}>
+            
+            {/* CARD FRONT */}
+            <div className="card-front" style={{
+              position: "absolute", width: "100%", height: "100%",
+              background: "var(--bg-elevated)", border: "1px solid var(--border)",
+              borderRadius: "var(--radius-xl)", display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: "1rem"
+            }}>
+              <div style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 64, height: 64, borderRadius: "50%",
+                background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)",
+                marginBottom: "0.5rem"
+              }}>
+                <EyeOff size={32} style={{ color: "var(--text-3)" }} />
+              </div>
+              <span style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-3)" }}>
+                Tap to Reveal
+              </span>
             </div>
-          ) : (
-            <div className="anim-reveal" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-              {displayRole === "imposter" ? (
+
+            {/* CARD BACK */}
+            <div className={`card-back ${
+              isHiddenWords
+                ? "glow-primary"
+                : displayRole === "imposter"
+                  ? "glow-danger"
+                  : displayRole === "undercover"
+                    ? "glow-warning"
+                    : "glow-primary"
+            }`} style={{
+              position: "absolute", width: "100%", height: "100%",
+              background: isHiddenWords
+                ? "linear-gradient(135deg, rgba(34,211,238,0.08) 0%, rgba(139,92,246,0.12) 100%)"
+                : displayRole === "imposter"
+                  ? "linear-gradient(135deg, rgba(244,63,94,0.1) 0%, rgba(244,63,94,0.2) 100%)"
+                  : displayRole === "undercover"
+                    ? "linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.2) 100%)"
+                    : "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.16) 100%)",
+              border: "1px solid transparent",
+              borderRadius: "var(--radius-xl)", display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: "1rem",
+              padding: "1.5rem"
+            }}>
+              {isHiddenWords ? (
+                <>
+                  <Sparkles size={52} style={{ color: "var(--cyan)" }} />
+                  {room.wordCategory && (
+                    <div className="badge badge-cyan">
+                      <Tag size={11} /> {room.wordCategory}
+                    </div>
+                  )}
+                  <p style={{ color: "var(--text-2)", fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                    Your secret word is:
+                  </p>
+                  <div style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid rgba(34,211,238,0.3)",
+                    padding: "0.75rem 1.75rem",
+                    borderRadius: "var(--radius-lg)",
+                    fontSize: "1.75rem",
+                    fontWeight: 900,
+                    color: "#fff",
+                    letterSpacing: "-0.01em",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.4) inset",
+                  }}>
+                    {displayWord}
+                  </div>
+                </>
+              ) : displayRole === "imposter" ? (
                 <>
                   <UserX size={52} style={{ color: "var(--danger)" }} />
                   <h3 style={{ fontSize: "2rem", fontWeight: 900, color: "var(--danger)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1 }}>
                     IMPOSTER
                   </h3>
-                  {/* Category badge */}
                   {room.wordCategory && (
-                    <div style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.3rem",
-                      background: "rgba(244,63,94,0.12)",
-                      border: "1px solid rgba(244,63,94,0.25)",
-                      borderRadius: 99,
-                      padding: "0.2rem 0.65rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--danger)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                    }}>
+                    <div className="badge badge-red">
                       <Tag size={11} /> {room.wordCategory}
                     </div>
                   )}
-                  {/* Hint */}
                   {displayHint && (
                     <div style={{
                       background: "rgba(244,63,94,0.1)",
-                      padding: "0.75rem 1rem",
+                      padding: "0.5rem 1rem",
                       borderRadius: "var(--radius-md)",
                       border: "1px dashed rgba(244,63,94,0.3)",
                       maxWidth: 280,
                     }}>
-                      <p style={{ fontSize: "0.75rem", color: "var(--danger)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em", marginBottom: "0.3rem" }}>
+                      <p style={{ fontSize: "0.7rem", color: "var(--danger)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em", marginBottom: "0.2rem" }}>
                         Your Hint
                       </p>
-                      <p style={{ fontSize: "1rem", color: "#fff", fontWeight: 600, lineHeight: 1.4 }}>{displayHint}</p>
+                      <p style={{ fontSize: "0.85rem", color: "#fff", fontWeight: 600, lineHeight: 1.3 }}>{displayHint}</p>
                     </div>
                   )}
-                  <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.85rem", fontStyle: "italic" }}>
+                  <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem", fontStyle: "italic" }}>
                     Blend in. Don&apos;t get caught.
+                  </p>
+                </>
+              ) : displayRole === "undercover" ? (
+                <>
+                  <EyeOff size={52} style={{ color: "var(--warning)" }} />
+                  <h3 style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--warning)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1 }}>
+                    UNDERCOVER
+                  </h3>
+                  {room.wordCategory && (
+                    <div className="badge badge-amber">
+                      <Tag size={11} /> {room.wordCategory}
+                    </div>
+                  )}
+                  <p style={{ color: "var(--text-2)", fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                    Your secret word is:
+                  </p>
+                  <div style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid rgba(245,158,11,0.3)",
+                    padding: "0.75rem 1.75rem",
+                    borderRadius: "var(--radius-lg)",
+                    fontSize: "1.75rem",
+                    fontWeight: 900,
+                    color: "#fff",
+                    letterSpacing: "-0.01em",
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.4) inset",
+                  }}>
+                    {displayWord}
+                  </div>
+                  <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem", fontStyle: "italic" }}>
+                    You have a decoy word! Blend in.
                   </p>
                 </>
               ) : (
                 <>
                   <Sparkles size={52} style={{ color: "var(--primary)" }} />
-                  <h3 style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--primary)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1.2 }}>
+                  <h3 style={{ fontSize: "1.8rem", fontWeight: 900, color: "var(--primary)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1.2 }}>
                     CREWMATE
                   </h3>
-                  {/* Category badge */}
                   {room.wordCategory && (
-                    <div style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.3rem",
-                      background: "var(--primary-dim)",
-                      border: "1px solid rgba(139,92,246,0.25)",
-                      borderRadius: 99,
-                      padding: "0.2rem 0.65rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "var(--primary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                    }}>
+                    <div className="badge badge-purple">
                       <Tag size={11} /> {room.wordCategory}
                     </div>
                   )}
@@ -282,7 +332,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
                 </>
               )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* Manual advance */}
@@ -292,7 +342,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
               onClick={handleHideAndPass}
               className="btn btn-primary btn-full btn-lg"
             >
-              Hide Role & Proceed
+              {isHiddenWords ? "Hide Word & Proceed" : "Hide Role & Proceed"}
             </button>
           </div>
         )}
@@ -305,15 +355,22 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
     <div className="card anim-scale-in" style={{ maxWidth: 460, margin: "0 auto", textAlign: "center" }}>
       <div style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--text-1)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
-          <ShieldCheck size={24} style={{ color: "var(--primary)" }} /> Your Secret Role
+          <ShieldCheck size={24} style={{ color: "var(--primary)" }} /> {isHiddenWords ? "Your Secret Word" : "Your Secret Role"}
         </h2>
         <p style={{ marginTop: "0.5rem", color: "var(--text-3)", fontSize: "0.95rem" }}>
-          Tap the card below to reveal your role. Make sure no one else is looking!
+          Tap the card below to reveal your {isHiddenWords ? "word" : "role"}. Make sure no one else is looking!
         </p>
       </div>
 
-      {/* ── Role Card ── */}
+      {/* ── Role Card (3D perspective flip) ── */}
       <div
+        className="perspective-1000"
+        style={{
+          width: "100%",
+          height: 320,
+          margin: "0 auto 2rem auto",
+          cursor: "pointer",
+        }}
         onClick={() => {
           if (!showRole) {
             triggerHaptic(HAPTICS.REVEAL);
@@ -324,97 +381,144 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
           }
           setShowRole(!showRole);
         }}
-        className="hover-lift"
-        style={{
-          background: showRole
-            ? me?.role === "imposter" ? "var(--danger-dim)" : "var(--primary-dim)"
-            : "var(--bg-elevated)",
-          border: `1px solid ${showRole
-            ? me?.role === "imposter" ? "rgba(244,63,94,0.3)" : "rgba(139,92,246,0.3)"
-            : "var(--border)"}`,
-          borderRadius: "var(--radius-xl)",
-          padding: "2.5rem 1.5rem",
-          cursor: "pointer",
-          marginBottom: "2rem",
-          transition: "all var(--dur-med) var(--ease-spring)",
-          boxShadow: showRole
-            ? me?.role === "imposter" ? "0 8px 32px var(--danger-glow)" : "0 8px 32px var(--primary-glow)"
-            : "none",
-        }}
       >
-        {!showRole ? (
-          <div className="anim-fade-in" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem", color: "var(--text-3)" }}>
-            <EyeOff size={48} />
-            <span style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>Tap to Reveal</span>
+        <div className={`card-inner ${showRole ? "card-flipped" : ""}`} style={{ width: "100%", height: "100%" }}>
+          
+          {/* CARD FRONT */}
+          <div className="card-front" style={{
+            position: "absolute", width: "100%", height: "100%",
+            background: "var(--bg-elevated)", border: "1px solid var(--border)",
+            borderRadius: "var(--radius-xl)", display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: "1rem"
+          }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 64, height: 64, borderRadius: "50%",
+              background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)",
+              marginBottom: "0.5rem"
+            }}>
+              <EyeOff size={32} style={{ color: "var(--text-3)" }} />
+            </div>
+            <span style={{ fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-3)" }}>
+              Tap to Reveal
+            </span>
           </div>
-        ) : (
-          <div className="anim-reveal" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-            {me?.role === "imposter" ? (
+
+          {/* CARD BACK */}
+          <div className={`card-back ${
+            isHiddenWords
+              ? "glow-primary"
+              : me?.role === "imposter"
+                ? "glow-danger"
+                : me?.role === "undercover"
+                  ? "glow-warning"
+                  : "glow-primary"
+          }`} style={{
+            position: "absolute", width: "100%", height: "100%",
+            background: isHiddenWords
+              ? "linear-gradient(135deg, rgba(34,211,238,0.08) 0%, rgba(139,92,246,0.12) 100%)"
+              : me?.role === "imposter"
+                ? "linear-gradient(135deg, rgba(244,63,94,0.1) 0%, rgba(244,63,94,0.2) 100%)"
+                : me?.role === "undercover"
+                  ? "linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.2) 100%)"
+                  : "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.16) 100%)",
+            border: "1px solid transparent",
+            borderRadius: "var(--radius-xl)", display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: "1rem",
+            padding: "1.5rem"
+          }}>
+            {isHiddenWords ? (
+              <>
+                <Sparkles size={56} style={{ color: "var(--cyan)" }} />
+                {room.wordCategory && (
+                  <div className="badge badge-cyan">
+                    <Tag size={11} /> Category: {room.wordCategory}
+                  </div>
+                )}
+                <p style={{ color: "var(--text-2)", fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                  Your word is:
+                </p>
+                <div style={{
+                  background: "var(--bg-card)",
+                  border: "1px solid rgba(34,211,238,0.3)",
+                  padding: "0.75rem 1.5rem",
+                  borderRadius: "var(--radius-lg)",
+                  fontSize: "1.5rem",
+                  fontWeight: 800,
+                  color: "#fff",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.4) inset",
+                }}>
+                  {room.word}
+                </div>
+              </>
+            ) : me?.role === "imposter" ? (
               <>
                 <UserX size={56} style={{ color: "var(--danger)" }} />
                 <h3 style={{ fontSize: "2rem", fontWeight: 900, color: "var(--danger)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1 }}>
                   IMPOSTER
                 </h3>
-                {/* Category badge */}
                 {room.wordCategory && (
-                  <div style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.3rem",
-                    background: "rgba(244,63,94,0.12)",
-                    border: "1px solid rgba(244,63,94,0.25)",
-                    borderRadius: 99,
-                    padding: "0.25rem 0.75rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    color: "var(--danger)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}>
+                  <div className="badge badge-red">
                     <Tag size={11} /> Category: {room.wordCategory}
                   </div>
                 )}
                 {room.imposterHint && (
                   <div style={{
                     background: "rgba(244,63,94,0.15)",
-                    padding: "0.65rem 1rem",
+                    padding: "0.5rem 1rem",
                     borderRadius: "var(--radius-md)",
                     border: "1px dashed rgba(244,63,94,0.3)",
                     marginTop: "0.25rem",
                     maxWidth: 300,
                   }}>
-                    <p style={{ fontSize: "0.75rem", color: "var(--danger)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em", marginBottom: "0.3rem" }}>
+                    <p style={{ fontSize: "0.7rem", color: "var(--danger)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em", marginBottom: "0.25rem" }}>
                       Your Hint
                     </p>
-                    <p style={{ fontSize: "1rem", color: "#fff", fontWeight: 600, lineHeight: 1.4 }}>{room.imposterHint}</p>
+                    <p style={{ fontSize: "0.9rem", color: "#fff", fontWeight: 600, lineHeight: 1.3 }}>{room.imposterHint}</p>
                   </div>
                 )}
                 <p style={{ color: "var(--text-1)", marginTop: "0.25rem", fontSize: "0.9rem", fontWeight: 500, fontStyle: "italic" }}>
                   Blend in. Don&apos;t get caught.
                 </p>
               </>
+            ) : me?.role === "undercover" ? (
+              <>
+                <UserX size={56} style={{ color: "var(--warning)" }} />
+                <h3 style={{ fontSize: "1.75rem", fontWeight: 900, color: "var(--warning)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1 }}>
+                  UNDERCOVER
+                </h3>
+                {room.wordCategory && (
+                  <div className="badge badge-amber">
+                    <Tag size={11} /> Category: {room.wordCategory}
+                  </div>
+                )}
+                <p style={{ color: "var(--text-2)", fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700 }}>
+                  Your secret word is:
+                </p>
+                <div style={{
+                  background: "var(--bg-card)",
+                  border: "1px solid rgba(245,158,11,0.3)",
+                  padding: "0.75rem 1.5rem",
+                  borderRadius: "var(--radius-lg)",
+                  fontSize: "1.5rem",
+                  fontWeight: 800,
+                  color: "#fff",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.4) inset",
+                }}>
+                  {room.word}
+                </div>
+                <p style={{ color: "var(--text-1)", marginTop: "0.25rem", fontSize: "0.9rem", fontWeight: 500, fontStyle: "italic" }}>
+                  You have a decoy word! Blend in.
+                </p>
+              </>
             ) : (
               <>
                 <Sparkles size={56} style={{ color: "var(--primary)" }} />
-                <h3 style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--primary)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1.2 }}>
+                <h3 style={{ fontSize: "1.8rem", fontWeight: 900, color: "var(--primary)", letterSpacing: "-0.02em", margin: 0, lineHeight: 1.2 }}>
                   CREWMATE
                 </h3>
-                {/* Category badge */}
                 {room.wordCategory && (
-                  <div style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.3rem",
-                    background: "var(--primary-dim)",
-                    border: "1px solid rgba(139,92,246,0.25)",
-                    borderRadius: 99,
-                    padding: "0.25rem 0.75rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    color: "var(--primary)",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                  }}>
+                  <div className="badge badge-purple">
                     <Tag size={11} /> Category: {room.wordCategory}
                   </div>
                 )}
@@ -436,7 +540,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
               </>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       <div style={{
@@ -453,7 +557,7 @@ export default function RoleReveal({ room, playerId }: RoleRevealProps) {
               disabled={loading}
               className="btn btn-primary btn-full btn-lg"
             >
-              {loading ? <Loader2 size={20} className="spinner" /> : "I've memorized my role – Ready up"}
+              {loading ? <Loader2 size={20} className="spinner" /> : `I've memorized my ${isHiddenWords ? "word" : "role"} - Ready up`}
             </button>
           </div>
         ) : (

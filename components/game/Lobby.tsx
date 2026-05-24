@@ -4,7 +4,8 @@ import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import { startGameClient } from "@/lib/api-client";
 import { PlayerBadge } from "@/components/ui/PlayerBadge";
-import { Copy, Check, Users, Shield, Crown, Play, Loader2, Link } from "lucide-react";
+import { Copy, Check, Users, Shield, Crown, Play, Loader2, Link, Fingerprint, EyeOff } from "lucide-react";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 export default function Lobby({ room, playerId }: { room: RoomView; playerId: string }) {
   const [copied, setCopied] = useState(false);
@@ -17,12 +18,16 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
 
   async function copyCode() {
     await navigator.clipboard.writeText(room.code);
+    triggerHaptic(HAPTICS.TAP);
+    playGameSound("TAP");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   async function handleStart() {
     if (!isHost || !canStart) return;
+    triggerHaptic(HAPTICS.REVEAL);
+    playGameSound("REVEAL");
     setLoading(true);
     try {
       await startGameClient(room.code, playerId);
@@ -89,6 +94,36 @@ export default function Lobby({ room, playerId }: { room: RoomView; playerId: st
         </button>
       </div>
       )}
+
+      {/* ── Game Mode ── */}
+      <div style={{
+        background: "rgba(255,255,255,0.02)",
+        border: "1px dashed rgba(139,92,246,0.3)",
+        borderRadius: "var(--radius-lg)",
+        padding: "0.85rem 1rem",
+        marginBottom: "1.5rem",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "1rem"
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
+          <span style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-3)", fontWeight: 700 }}>
+            Game Mode
+          </span>
+          <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--primary)", marginTop: "0.1rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+            {room.gameMode === "classic" && <Shield size={16} />}
+            {room.gameMode === "hidden_words" && <Fingerprint size={16} />}
+            {room.gameMode === "undercover" && <EyeOff size={16} />}
+            {room.gameMode === "classic" ? "Classic" : room.gameMode === "hidden_words" ? "Mystery Word" : "Undercover"}
+          </span>
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "var(--text-2)", maxWidth: "60%", textAlign: "right", lineHeight: 1.3 }}>
+          {room.gameMode === "classic" && "Classic mode: Imposter gets hint, Crew gets word."}
+          {room.gameMode === "hidden_words" && "Mystery Word: No role labels, one decoy word."}
+          {room.gameMode === "undercover" && "Undercover: Crew, Undercover (decoy), and Imposter."}
+        </div>
+      </div>
 
       {/* ── Player List ── */}
       <div style={{ marginBottom: "2rem" }}>

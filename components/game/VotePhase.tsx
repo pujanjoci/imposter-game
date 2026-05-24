@@ -71,12 +71,18 @@ export default function VotePhase({
           letterSpacing: "-0.02em",
         }}
       >
-        {room.imposterCount > 1 ? "Vote out the Imposters" : "Vote out the Imposter"}
+        {room.gameMode === "undercover"
+          ? "Vote out the Suspect"
+          : room.imposterCount > 1
+            ? "Vote out the Imposters"
+            : "Vote out the Imposter"}
       </h2>
       <p style={{ color: "var(--text-3)", marginTop: "0.4rem", fontSize: "0.95rem" }}>
         {hasVoted
           ? `Waiting for ${pendingCount} more player${pendingCount !== 1 ? "s" : ""}…`
-          : "Who do you think is faking it?"}
+          : room.gameMode === "undercover"
+            ? `Find the Imposter or Undercover. Who is faking it? (Clue Round ${room.clueRound || 1} of 3)`
+            : `Who do you think is faking it? (Clue Round ${room.clueRound || 1} of 3)`}
       </p>
 
       {/* Player vote buttons */}
@@ -137,7 +143,7 @@ export default function VotePhase({
                   <div style={{ fontWeight: 700, fontSize: "1rem" }}>{p.name}</div>
                   {p.clue && (
                     <div style={{ fontSize: "0.8rem", color: "var(--text-3)", fontStyle: "italic" }}>
-                      clue: "{p.clue}"
+                      submitted: "{p.clue}"
                     </div>
                   )}
                 </div>

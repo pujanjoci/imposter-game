@@ -1,19 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import {
   Send, FileText, Loader2, Sparkles, MessageSquare,
-  ChevronRight, EyeOff, Eye, Tag, Users
+  ChevronRight, Tag, Users
 } from "lucide-react";
 import { submitClueClient, advanceToInterRoundClient } from "@/lib/api-client";
+import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 export default function CluePhase({ room, playerId }: { room: RoomView; playerId: string }) {
   const [clue, setClue] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showHint, setShowHint] = useState(false);
 
   const isSingleDevice = room.singleDeviceMode;
+  const isHiddenWords = room.gameMode === "hidden_words";
 
   const me = room.players.find((p) => p.id === playerId);
   if (!me && !isSingleDevice) return null;
@@ -21,21 +22,16 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
   // Simpler: just check submissions empty status
   const hasSubmitted = me ? !!me.clue : false;
 
-  // For the word/hint display in SD mode, we need to show based on role
-  // which is embedded in the player object
-  const activePlayerRole = me?.role;
-  const showWord = activePlayerRole !== "imposter"; // imposter doesn't see the word
-  const showImposterHint = activePlayerRole === "imposter";
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!clue.trim() || loading || !me) return;
+    triggerHaptic(HAPTICS.TAP);
+    playGameSound("TAP");
     setLoading(true);
     try {
       await submitClueClient(room.code, me.id, clue.trim());
       if (isSingleDevice) {
         setClue("");
-        setShowHint(false);
       }
     } finally {
       setLoading(false);
@@ -55,9 +51,9 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
           }}>
             <MessageSquare size={24} />
           </div>
-          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-1)" }}>Clue Submitted!</h3>
+          <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-1)" }}>Submission Received!</h3>
           <p style={{ color: "var(--text-2)", marginTop: "0.25rem" }}>
-            Your clue: <strong style={{ color: "var(--primary)", fontWeight: 800 }}>"{me?.clue}"</strong>
+            Your submission: <strong style={{ color: "var(--primary)", fontWeight: 800 }}>&quot;{me?.clue}&quot;</strong>
           </p>
           <div style={{ marginTop: "2rem", padding: "1.5rem", background: "var(--bg-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", fontSize: "0.85rem", fontWeight: 600 }}>
@@ -94,7 +90,7 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
         <p style={{ color: "var(--text-3)", fontSize: "0.95rem", marginBottom: "2rem" }}>
           Go around the group and say your one-word clue out loud! 
           <br /><br />
-          Once everyone has shared their clue, click below to advance to the Imposter's turn.
+          Once everyone has shared their clue, click below to {isHiddenWords ? "reveal the result" : "advance to the Imposter's turn"}.
         </p>
         <button
           onClick={async () => {
@@ -111,7 +107,7 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
            {loading ? (
              <><Loader2 size={20} className="spinner" /> Advancing…</>
            ) : (
-             <><ChevronRight size={20} /> Advance to Imposter Guess</>
+             <><ChevronRight size={20} /> {isHiddenWords ? "Advance to Reveal" : "Advance to Imposter Guess"}</>
            )}
         </button>
       </div>
@@ -121,13 +117,29 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
   // ── MULTIPLAYER MODE ──────────────────────────────────────────────────────
   const mpMe = room.players.find((p) => p.id === playerId)!;
   const mpIsImposter = mpMe.role === "imposter";
+  const mpIsUndercover = mpMe.role === "undercover";
 
   return (
     <div className="card-elevated anim-scale-in" style={{ maxWidth: 540, margin: "0 auto", padding: "var(--card-py) var(--card-px)" }}>
+      {room.resultReason && (
+        <div className="msg msg-warn anim-fade-in" style={{ marginBottom: "1.5rem" }}>
+          {room.resultReason}
+        </div>
+      )}
       {/* Context Header */}
       <div style={{
-        background: mpIsImposter ? "rgba(244,63,94,0.08)" : "rgba(139,92,246,0.08)",
-        border: `1px solid ${mpIsImposter ? "rgba(244,63,94,0.2)" : "rgba(139,92,246,0.2)"}`,
+        background: (mpIsImposter && !isHiddenWords)
+          ? "rgba(244,63,94,0.08)"
+          : mpIsUndercover
+            ? "rgba(245,158,11,0.08)"
+            : "rgba(139,92,246,0.08)",
+        border: `1px solid ${
+          (mpIsImposter && !isHiddenWords)
+            ? "rgba(244,63,94,0.2)"
+            : mpIsUndercover
+              ? "rgba(245,158,11,0.2)"
+              : "rgba(139,92,246,0.2)"
+        }`,
         borderRadius: "var(--radius-lg)",
         padding: "1.25rem",
         marginBottom: "2rem",
@@ -137,28 +149,58 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
       }}>
         <div style={{
           width: 48, height: 48, borderRadius: "calc(var(--radius-md) - 2px)",
-          background: mpIsImposter ? "var(--danger-dim)" : "var(--primary-dim)",
-          color: mpIsImposter ? "var(--danger)" : "var(--primary)",
+          background: (mpIsImposter && !isHiddenWords)
+            ? "var(--danger-dim)"
+            : mpIsUndercover
+              ? "var(--warning-dim)"
+              : "var(--primary-dim)",
+          color: (mpIsImposter && !isHiddenWords)
+            ? "var(--danger)"
+            : mpIsUndercover
+              ? "var(--warning)"
+              : "var(--primary)",
           display: "flex", alignItems: "center", justifyContent: "center",
           flexShrink: 0,
         }}>
-          {mpIsImposter ? <Sparkles size={24} /> : <FileText size={24} />}
+          {(mpIsImposter && !isHiddenWords) ? <Sparkles size={24} /> : <FileText size={24} />}
         </div>
         <div>
           <h3 style={{ fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-3)", fontWeight: 700, marginBottom: "0.2rem" }}>
-            {mpIsImposter ? "Your Goal" : "The Secret Word"}
+            {isHiddenWords
+              ? "Your Word"
+              : mpIsUndercover
+                ? "Your Word"
+                : mpIsImposter
+                  ? "Your Goal"
+                  : "The Secret Word"}
           </h3>
           <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--text-1)", letterSpacing: "0.02em" }}>
-            {mpIsImposter ? "Blend in. Act casual." : room.word}
+            {(mpIsImposter && !isHiddenWords) ? "Blend in. Act casual." : room.word}
           </div>
-          {mpIsImposter && room.wordCategory && (
-            <div style={{ marginTop: "0.2rem", fontSize: "0.8rem", color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+          {room.wordCategory && (
+            <div style={{
+              marginTop: "0.2rem",
+              fontSize: "0.8rem",
+              color: (mpIsImposter && !isHiddenWords)
+                ? "var(--danger)"
+                : mpIsUndercover
+                  ? "var(--warning)"
+                  : "var(--primary)",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.3rem"
+            }}>
               <Tag size={11} /> Category: <span style={{ fontWeight: 600 }}>{room.wordCategory}</span>
             </div>
           )}
-          {mpIsImposter && room.imposterHint && (
+          {(mpIsImposter && !isHiddenWords) && room.imposterHint && (
             <div style={{ marginTop: "0.25rem", fontSize: "0.8rem", color: "rgba(244,63,94,0.8)" }}>
               Hint: <span style={{ fontWeight: 600 }}>{room.imposterHint}</span>
+            </div>
+          )}
+          {mpIsUndercover && (
+            <div style={{ marginTop: "0.25rem", fontSize: "0.8rem", color: "rgba(245,158,11,0.8)" }}>
+              Note: <span style={{ fontWeight: 600 }}>You are Undercover. Blend in!</span>
             </div>
           )}
         </div>
@@ -166,9 +208,14 @@ export default function CluePhase({ room, playerId }: { room: RoomView; playerId
 
       {/* Clue Input Form */}
       <form onSubmit={handleSubmit} className="anim-slide-up">
-        <label style={{ display: "block", marginBottom: "0.5rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--text-2)" }}>
-          Enter your one-word clue:
-        </label>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+          <label style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-2)" }}>
+            Enter your one-word submission:
+          </label>
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--primary)" }}>
+            Round {room.clueRound || 1} of 3
+          </span>
+        </div>
         <div style={{ display: "flex", gap: "0.75rem", flexDirection: "column" }}>
           <input
             type="text"

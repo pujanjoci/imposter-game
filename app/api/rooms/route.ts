@@ -1,6 +1,11 @@
 // POST /api/rooms — create a new room (multiplayer OR single-device)
 import { NextRequest, NextResponse } from "next/server";
 import { createRoom, createRoomSingleDevice } from "@/lib/game-store";
+import type { GameMode } from "@/lib/types";
+
+function parseGameMode(value: unknown): GameMode {
+  return value === "hidden_words" ? "hidden_words" : "classic";
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,7 +42,11 @@ export async function POST(req: NextRequest) {
         );
       }
       const manualImposterCount = typeof body.manualImposterCount === "number" ? body.manualImposterCount : null;
-      const { room, playerIds } = createRoomSingleDevice(names, manualImposterCount);
+      const { room, playerIds } = createRoomSingleDevice(
+        names,
+        manualImposterCount,
+        parseGameMode(body.gameMode)
+      );
       return NextResponse.json({ code: room.code, playerIds }, { status: 201 });
     }
 
@@ -47,7 +56,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Host name is required" }, { status: 400 });
     }
     const manualImposterCount = typeof body.manualImposterCount === "number" ? body.manualImposterCount : null;
-    const { room, hostId } = createRoom(String(hostName).trim(), manualImposterCount);
+    const { room, hostId } = createRoom(
+      String(hostName).trim(),
+      manualImposterCount,
+      parseGameMode(body.gameMode)
+    );
     return NextResponse.json({ code: room.code, playerId: hostId }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Failed to create room" }, { status: 500 });
