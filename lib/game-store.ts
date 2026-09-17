@@ -34,7 +34,17 @@ function generateId(): string {
 function broadcast(code: string): void {
   const room = rooms.get(code);
   if (!room) return;
-  subscribers.get(code)?.forEach((cb) => cb(room));
+  const cbs = subscribers.get(code);
+  if (!cbs || cbs.size === 0) return;
+
+  const list = Array.from(cbs);
+  for (const cb of list) {
+    try {
+      cb(room);
+    } catch {
+      cbs.delete(cb);
+    }
+  }
 }
 
 function touch(room: Room): void {
@@ -202,14 +212,14 @@ function beginRound(room: Room): void {
 
   // Assign a unique hint to each imposter
   room.imposterHints = {};
-  const shuffledHints = [...hints].sort(() => Math.random() - 0.5);
+  const shuffledHints = [...(hints || [])].sort(() => Math.random() - 0.5);
   const decoy = (gameMode === "hidden_words" || gameMode === "undercover") ? pickDecoyWord(word, category) : null;
   selectedImposters.forEach((p, i) => {
     if (gameMode === "hidden_words" && decoy) {
       room.playerWords[p.id] = decoy.word;
       return;
     }
-    room.imposterHints[p.id] = shuffledHints[i % shuffledHints.length];
+    room.imposterHints[p.id] = shuffledHints.length > 0 ? shuffledHints[i % shuffledHints.length] : "blend in";
   });
 
   room.players.forEach((p) => {
@@ -514,22 +524,23 @@ function resolveVotes(room: Room): void {
   }
 
   const mostVotedPlayer = room.players.find((p) => p.id === mostVotedId);
+  const mostVotedName = mostVotedPlayer?.name || "A suspect";
   const isTargetImposterOrUndercover = room.imposterIds.includes(mostVotedId) || mostVotedPlayer?.role === "undercover";
 
   if (isTargetImposterOrUndercover) {
     room.result = "players_win";
     room.resultReason = room.gameMode === "undercover"
-      ? `Crewmates correctly voted out the ${mostVotedPlayer?.role === "imposter" ? "Imposter" : "Undercover"}: ${mostVotedPlayer?.name}!`
+      ? `Crewmates correctly voted out the ${mostVotedPlayer?.role === "imposter" ? "Imposter" : "Undercover"}: ${mostVotedName}!`
       : room.gameMode === "hidden_words"
-        ? `The group correctly voted out ${mostVotedPlayer?.name}.`
-        : `Crewmates correctly voted out an Imposter: ${mostVotedPlayer?.name}!`;
+        ? `The group correctly voted out ${mostVotedName}.`
+        : `Crewmates correctly voted out an Imposter: ${mostVotedName}!`;
   } else {
     room.result = "imposter_wins";
     room.resultReason = room.gameMode === "undercover"
-      ? `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposter & Undercover win.`
+      ? `Crewmates voted out ${mostVotedName} — who was innocent! The Imposter & Undercover win.`
       : room.gameMode === "hidden_words"
-        ? `The group voted out ${mostVotedPlayer?.name}, but the Imposter survived.`
-        : `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposters survive.`;
+        ? `The group voted out ${mostVotedName}, but the Imposter survived.`
+        : `Crewmates voted out ${mostVotedName} — who was innocent! The Imposters survive.`;
   }
 
   room.phase = "results";
@@ -662,15 +673,22 @@ export function subscribe(
 }
 
 // ---------------------------------------------------------------------------
-// Cleanup stale rooms (> 3 hours old)
+// Cleanup stale rooms (inactive > 3 hours)
 // ---------------------------------------------------------------------------
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [code, room] of rooms.entries()) {
-    if (now - room.createdAt > 3 * 60 * 60 * 1000) {
-      rooms.delete(code);
-      subscribers.delete(code);
+if (typeof setInterval !== "undefined") {
+  const cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [code, room] of rooms.entries()) {
+      const lastActivity = room.updatedAt || room.createdAt;
+      if (now - lastActivity > 3 * 60 * 60 * 1000) {
+        rooms.delete(code);
+        subscribers.delete(code);
+      }
     }
+  }, 10 * 60 * 1000);
+
+  if (cleanupInterval.unref) {
+    cleanupInterval.unref();
   }
-}, 10 * 60 * 1000);
+}

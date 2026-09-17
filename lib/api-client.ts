@@ -201,19 +201,5 @@ export async function revealLocalImposterClient(code: string): Promise<void> {
  * Starts next round.
  */
 export async function startNextRoundClient(code: string, requesterId: string): Promise<void> {
-  if (isLocalRoom(code)) {
-    const res = startNextLocalRound(code, requesterId);
-    if (res?.error) throw new Error(res.error);
-    return;
-  }
-
-  const res = await fetch(`/api/rooms/${code}/continue`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requesterId }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || "Failed to start next round");
-  }
+  return nextRoundClient(code, requesterId);
 }

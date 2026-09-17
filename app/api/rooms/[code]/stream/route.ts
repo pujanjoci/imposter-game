@@ -27,15 +27,38 @@ export async function GET(
 
   const stream = new ReadableStream({
     start(controller) {
+      let isClosed = false;
+      let ping: NodeJS.Timeout | null = null;
+      let unsub: (() => void) | null = null;
+
+      const cleanup = () => {
+        if (isClosed) return;
+        isClosed = true;
+        if (ping) {
+          clearInterval(ping);
+          ping = null;
+        }
+        if (unsub) {
+          unsub();
+          unsub = null;
+        }
+        try {
+          controller.close();
+        } catch {
+          // Already closed
+        }
+      };
+
       // Helper: serialize the room view and enqueue it as an SSE event
       function send(r: Room) {
+        if (isClosed) return;
         const view = getRoomView(roomCode, playerId);
         if (!view) return;
         const data = `data: ${JSON.stringify(view)}\n\n`;
         try {
           controller.enqueue(encoder.encode(data));
         } catch {
-          // Client already disconnected — ignore
+          cleanup();
         }
       }
 
@@ -43,27 +66,23 @@ export async function GET(
       send(room);
 
       // Subscribe to future state changes
-      const unsub = subscribe(roomCode, send);
+      unsub = subscribe(roomCode, send);
 
-      // Keep-alive ping every 20 s to prevent proxy/mobile timeouts
-      const ping = setInterval(() => {
+      // Keep-alive ping every 15 s to prevent proxy/mobile timeouts
+      ping = setInterval(() => {
+        if (isClosed) return;
         try {
           controller.enqueue(encoder.encode(": ping\n\n"));
         } catch {
-          clearInterval(ping);
+          cleanup();
         }
-      }, 20_000);
+      }, 15_000);
 
-      // Clean up when the client disconnects
-      req.signal.addEventListener("abort", () => {
-        unsub();
-        clearInterval(ping);
-        try {
-          controller.close();
-        } catch {
-          // Already closed
-        }
-      });
+      // Clean up when the client disconnects or aborts
+      req.signal.addEventListener("abort", cleanup);
+    },
+    cancel() {
+      // ReadableStream cancelled by consumer
     },
   });
 

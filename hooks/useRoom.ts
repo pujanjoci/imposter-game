@@ -12,9 +12,9 @@ interface UseRoomReturn {
   connected: boolean;
 }
 
-const MAX_RETRIES = 8;
-const BASE_DELAY = 2000;
-const MAX_DELAY = 30000;
+const MAX_RETRIES = 12;
+const BASE_DELAY = 1500;
+const MAX_DELAY = 15000;
 
 export function useRoom(code: string): UseRoomReturn {
   const [room, setRoom] = useState<RoomView | null>(null);
@@ -24,11 +24,10 @@ export function useRoom(code: string): UseRoomReturn {
   const esRef = useRef<EventSource | null>(null);
   const retriesRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Track whether we're mounted to avoid state updates after unmount
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
-  // Resolve playerId from localStorage — don't error immediately on missing,
-  // let the room page handle the redirect (supports mobile share links)
+  // Resolve playerId from localStorage
   useEffect(() => {
     mountedRef.current = true;
     const pid = localStorage.getItem(`player_${code}`) || "";
@@ -38,10 +37,30 @@ export function useRoom(code: string): UseRoomReturn {
     };
   }, [code]);
 
-  const connect = useCallback(async () => {
-    if (!playerId) return;
-    if (!mountedRef.current) return;
+  // Fetch immediate fresh snapshot from API
+  const fetchSnapshot = useCallback(async (pid: string) => {
+    if (!pid || isLocalRoom(code)) return;
+    try {
+      const res = await fetch(`/api/rooms/${code}?playerId=${pid}`, {
+        cache: "no-store",
+      });
+      if (!mountedRef.current) return;
+      if (res.ok) {
+        const data: RoomView = await res.json();
+        setRoom(data);
+        setError("");
+      } else if (res.status === 404 && retriesRef.current >= 3) {
+        setError("Room not found. It may have expired — please create or join a new room.");
+      }
+    } catch {
+      // Network blip, will retry or receive via SSE
+    }
+  }, [code]);
 
+  const connect = useCallback(async () => {
+    if (!playerId || !mountedRef.current) return;
+
+    // Handle Local Single Device Room
     if (isLocalRoom(code)) {
       setConnected(true);
       setError("");
@@ -74,37 +93,22 @@ export function useRoom(code: string): UseRoomReturn {
       return;
     }
 
-    // Hit retry limit — stop trying
+    // Hit retry limit
     if (retriesRef.current >= MAX_RETRIES) {
-      setError("Unable to connect to the room. It may have expired or the server restarted.");
+      setError("Connection lost. The room may have expired or server restarted.");
       setConnected(false);
       return;
     }
 
-    // ── Pre-check: verify the room exists before opening the SSE connection.
-    // This surfaces a clean error immediately instead of an infinite 404 loop.
-    try {
-      const check = await fetch(`/api/rooms/${code}?playerId=${playerId}`);
-      if (!mountedRef.current) return;
-      if (check.status === 404) {
-        setError("Room not found. It may have expired — please create or join a new room.");
-        setConnected(false);
-        return;
-      }
-    } catch {
-      // Network error on pre-check — fall through and try the SSE connection anyway
-    }
+    // Immediately fetch snapshot for fast initial state
+    fetchSnapshot(playerId);
 
-    if (!mountedRef.current) return;
-
-    // Close any existing connection
+    // Close any prior EventSource
     if (esRef.current) {
       esRef.current.close();
       esRef.current = null;
     }
 
-    // Use an absolute URL so EventSource works correctly on mobile browsers
-    // that are connected via LAN IP (e.g. 192.168.x.x:3000)
     const base =
       typeof window !== "undefined"
         ? `${window.location.protocol}//${window.location.host}`
@@ -115,16 +119,21 @@ export function useRoom(code: string): UseRoomReturn {
 
     es.onopen = () => {
       if (!mountedRef.current) return;
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
       setConnected(true);
       setError("");
       retriesRef.current = 0;
+      // Fetch latest state upon handshake
+      fetchSnapshot(playerId);
     };
 
     es.onmessage = (e) => {
       if (!mountedRef.current) return;
       try {
         const data: RoomView = JSON.parse(e.data);
-        // Server may send an error payload — surface it and stop
         if ((data as unknown as { error?: string }).error) {
           setError((data as unknown as { error: string }).error);
           setConnected(false);
@@ -133,44 +142,79 @@ export function useRoom(code: string): UseRoomReturn {
         }
         setRoom(data);
         setError("");
+        setConnected(true);
       } catch {
-        // Ignore parse errors (e.g. keep-alive ping lines)
+        // Ping or keepalive lines
       }
     };
 
     es.onerror = () => {
       if (!mountedRef.current) return;
-      setConnected(false);
-      es.close();
-      esRef.current = null;
 
-      retriesRef.current += 1;
-
-      if (retriesRef.current >= MAX_RETRIES) {
-        setError("Connection lost. The room may no longer exist.");
-        return;
+      // Grace period before marking UI as disconnected
+      if (!disconnectTimerRef.current) {
+        disconnectTimerRef.current = setTimeout(() => {
+          if (mountedRef.current && (!esRef.current || esRef.current.readyState !== EventSource.OPEN)) {
+            setConnected(false);
+          }
+        }, 1500);
       }
 
-      // Exponential back-off: 2s → 4s → 8s → … capped at 30s
-      const delay = Math.min(BASE_DELAY * Math.pow(2, retriesRef.current - 1), MAX_DELAY);
-      retryTimerRef.current = setTimeout(() => connect(), delay);
-    };
-  }, [code, playerId]);
+      // If browser already closed or failed the connection, reconnect with backoff
+      if (es.readyState === EventSource.CLOSED) {
+        es.close();
+        esRef.current = null;
 
+        retriesRef.current += 1;
+        if (retriesRef.current >= MAX_RETRIES) {
+          setError("Connection lost. Please refresh or return to lobby.");
+          return;
+        }
+
+        const delay = Math.min(BASE_DELAY * Math.pow(1.5, retriesRef.current - 1), MAX_DELAY);
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) connect();
+        }, delay);
+      }
+    };
+  }, [code, playerId, fetchSnapshot]);
+
+  // Initial connection
   useEffect(() => {
     if (!playerId) return;
     retriesRef.current = 0;
     connect();
 
+    // Reconnect and refresh on tab focus / mobile resume / network online
+    const handleVisibilityOrOnline = () => {
+      if (document.visibilityState === "visible" && playerId && !isLocalRoom(code)) {
+        retriesRef.current = 0;
+        fetchSnapshot(playerId);
+        if (!esRef.current || esRef.current.readyState === EventSource.CLOSED) {
+          connect();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityOrOnline);
+    window.addEventListener("online", handleVisibilityOrOnline);
+
     return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityOrOnline);
+      window.removeEventListener("online", handleVisibilityOrOnline);
       esRef.current?.close();
       esRef.current = null;
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
     };
-  }, [connect, playerId]);
+  }, [connect, playerId, code, fetchSnapshot]);
 
   return { room, playerId, error, connected };
 }

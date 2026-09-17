@@ -360,19 +360,22 @@ function resolveLocalVotes(room: Room): void {
   }
 
   const mostVotedPlayer = room.players.find((p) => p.id === mostVotedId);
+  const mostVotedName = mostVotedPlayer?.name || "A suspect";
   const isTargetImposterOrUndercover = room.imposterIds.includes(mostVotedId) || mostVotedPlayer?.role === "undercover";
 
   if (isTargetImposterOrUndercover) {
     room.result = "players_win";
     room.resultReason = room.gameMode === "undercover"
-      ? `Crewmates correctly voted out the ${mostVotedPlayer?.role === "imposter" ? "Imposter" : "Undercover"}: ${mostVotedPlayer?.name}!`
-      : `Crewmates correctly voted out an Imposter: ${mostVotedPlayer?.name}!`;
+      ? `Crewmates correctly voted out the ${mostVotedPlayer?.role === "imposter" ? "Imposter" : "Undercover"}: ${mostVotedName}!`
+      : `Crewmates correctly voted out an Imposter: ${mostVotedName}!`;
   } else {
     room.result = "imposter_wins";
     room.resultReason = room.gameMode === "undercover"
-      ? `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposter & Undercover win.`
-      : `Crewmates voted out ${mostVotedPlayer?.name} — who was innocent! The Imposters survive.`;
+      ? `Crewmates voted out ${mostVotedName} — who was innocent! The Imposter & Undercover win.`
+      : `Crewmates voted out ${mostVotedName} — who was innocent! The Imposters survive.`;
   }
+
+  room.phase = "results";
 }
 
 export function revealLocalImposter(code: string): { error: string } | null {

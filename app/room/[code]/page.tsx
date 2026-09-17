@@ -282,18 +282,23 @@ export default function RoomPage() {
       </header>
 
       {/* Reconnecting banner */}
-      {!connected && (
+      {!connected && !isSingleDevice && (
         <div
           style={{
             background: "var(--warning-dim)",
             color: "var(--warning)",
-            textAlign: "center",
-            padding: "0.5rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
+            padding: "0.45rem 1rem",
             fontSize: "0.85rem",
+            fontWeight: 600,
             borderBottom: "1px solid rgba(245,158,11,0.2)",
           }}
         >
-          Reconnecting to server…
+          <div className="spinner" style={{ width: 14, height: 14, borderTopColor: "var(--warning)" }} />
+          <span>Reconnecting to server…</span>
         </div>
       )}
 

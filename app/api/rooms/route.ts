@@ -4,7 +4,9 @@ import { createRoom, createRoomSingleDevice } from "@/lib/game-store";
 import type { GameMode } from "@/lib/types";
 
 function parseGameMode(value: unknown): GameMode {
-  return value === "hidden_words" ? "hidden_words" : "classic";
+  if (value === "hidden_words") return "hidden_words";
+  if (value === "undercover") return "undercover";
+  return "classic";
 }
 
 export async function POST(req: NextRequest) {
