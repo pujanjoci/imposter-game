@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { RoomView } from "@/lib/types";
 import {
-  Loader2, Target, SkipForward, Sparkles, MessageSquare,
-  Eye, EyeOff,
+  Loader2, Target, Sparkles, MessageSquare,
+  Eye, EyeOff, Vote
 } from "lucide-react";
-import { submitGuessClient, skipGuessClient } from "@/lib/api-client";
+import { submitGuessClient } from "@/lib/api-client";
 import { playGameSound, triggerHaptic, HAPTICS } from "@/lib/audio";
 
 export default function InterRound({
@@ -18,19 +18,15 @@ export default function InterRound({
 }) {
   const [guess, setGuess] = useState("");
   const [showGuess, setShowGuess] = useState(false);
-  const [loading, setLoading] = useState<"guess" | "skip" | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const isSingleDevice = room.singleDeviceMode;
 
   // In single-device mode, all roles are revealed so we can find the imposter
-  // The device acts on behalf of the imposter player
   const imposterPlayer = isSingleDevice
     ? room.players.find((p) => p.role === "imposter")
     : null;
 
-  // The player doing the API call:
-  // - SD mode: the imposter player's ID (device acts as them)
-  // - Multiplayer: own player ID
   const activePlayerId = isSingleDevice && imposterPlayer
     ? imposterPlayer.id
     : playerId;
@@ -38,33 +34,19 @@ export default function InterRound({
   const me = room.players.find((p) => p.id === playerId);
   if (!me) return null;
 
-  // In single-device mode, always show the imposter's interaction
   const isImposter = isSingleDevice ? true : me.role === "imposter";
 
-  // ── Submit guess ──────────────────────────────────────────────────────────
-  async function handleGuess(e: React.FormEvent) {
-    e.preventDefault();
-    if (!guess.trim() || loading) return;
-    triggerHaptic(HAPTICS.TAP);
-    playGameSound("TAP");
-    setLoading("guess");
-    try {
-      await submitGuessClient(room.code, activePlayerId, guess.trim());
-    } finally {
-      setLoading(null);
-    }
-  }
-
-  // ── Skip guess → go straight to vote/results phase ───────────────────────
-  async function handleSkip() {
+  // ── Submit guess & go directly to voting ─────────────────────────────────
+  async function handleSubmitAndVote(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     if (loading) return;
     triggerHaptic(HAPTICS.TAP);
     playGameSound("TAP");
-    setLoading("skip");
+    setLoading(true);
     try {
-      await skipGuessClient(room.code, activePlayerId);
+      await submitGuessClient(room.code, activePlayerId, guess.trim());
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   }
 
@@ -104,14 +86,10 @@ export default function InterRound({
             letterSpacing: "-0.02em",
           }}
         >
-          {room.imposterCount > 1 ? "Imposters are deciding…" : "Imposter is deciding…"}
+          {room.imposterCount > 1 ? "Imposters are guessing…" : "Imposter is guessing…"}
         </h2>
         <p style={{ color: "var(--text-3)", marginTop: "0.4rem", fontSize: "0.95rem" }}>
-          {room.imposterCount > 1
-            ? (isSingleDevice 
-                ? "As one of the imposters, you can try to guess the word." 
-                : "You and your fellow imposters can guess the word to win instantly.")
-            : "Think you've figured it out? Guess the word to win instantly!"}
+          The imposter is reviewing clues and guessing the word. Voting will start in a moment!
         </p>
 
         {/* Show everyone's clues while waiting */}
@@ -205,12 +183,13 @@ export default function InterRound({
             }}
           >
             {isSingleDevice
-              ? (room.imposterCount > 1 ? "Imposters' Decision" : "Imposter Decision")
-              : (room.imposterCount > 1 ? "An Imposter's Turn to Guess" : "Your Turn to Guess")}
+              ? (room.imposterCount > 1 ? "Imposters' Turn" : "Imposter Turn")
+              : "Your Turn to Guess"}
           </h3>
           <p style={{ color: "var(--text-2)", fontSize: "0.9rem", fontWeight: 500 }}>
-            {!isSingleDevice && "Guess the secret word now to win instantly — or skip to the vote."}
-            {isSingleDevice && "Ready to see if the group caught you? Continue to the vote."}
+            {isSingleDevice
+              ? "Review clues, then continue to the vote / reveal."
+              : "Guess the secret word if you know it, then proceed to the group vote!"}
           </p>
         </div>
       </div>
@@ -289,9 +268,9 @@ export default function InterRound({
         </>
       )}
 
-      {/* Guess form - Hidden in single device mode */}
-      {!isSingleDevice && (
-        <form onSubmit={handleGuess} style={{ marginBottom: "1rem" }}>
+      {/* Single seamless Guess & Vote Action */}
+      {!isSingleDevice ? (
+        <form onSubmit={handleSubmitAndVote} style={{ marginBottom: "0.5rem" }}>
           <label
             style={{
               display: "block",
@@ -301,14 +280,14 @@ export default function InterRound({
               color: "var(--text-2)",
             }}
           >
-            What is the secret word?
+            Secret Word Guess (optional):
           </label>
-          <div style={{ position: "relative", marginBottom: "0.75rem" }}>
+          <div style={{ position: "relative", marginBottom: "1rem" }}>
             <input
               type={showGuess ? "text" : "password"}
               value={guess}
               onChange={(e) => setGuess(e.target.value)}
-              placeholder="Type your guess…"
+              placeholder="Type your guess (or leave blank)…"
               className="input input-lg"
               autoComplete="off"
               style={{
@@ -338,54 +317,34 @@ export default function InterRound({
           </div>
           <button
             type="submit"
-            disabled={!guess.trim() || !!loading}
-            className="btn btn-danger btn-lg btn-full"
+            disabled={loading}
+            className="btn btn-primary btn-lg btn-full"
             style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
           >
-            {loading === "guess" ? (
-              <><Loader2 size={18} className="spinner" /> Guessing…</>
+            {loading ? (
+              <><Loader2 size={18} className="spinner" /> Proceeding to Vote…</>
+            ) : guess.trim() ? (
+              <><Target size={18} /> Submit Guess & Go to Voting</>
             ) : (
-              <><Target size={18} /> Submit Guess & Win</>
+              <><Vote size={18} /> Go to Voting</>
             )}
           </button>
         </form>
-      )}
-
-      {/* Divider */}
-      {!isSingleDevice && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            margin: "1.25rem 0",
-            color: "var(--text-3)",
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
+      ) : (
+        <button
+          type="button"
+          onClick={() => handleSubmitAndVote()}
+          disabled={loading}
+          className="btn btn-primary btn-lg btn-full"
+          style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
         >
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-          or
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        </div>
+          {loading ? (
+            <><Loader2 size={18} className="spinner" /> Continuing…</>
+          ) : (
+            <><Vote size={18} /> Continue to Reveal</>
+          )}
+        </button>
       )}
-
-      {/* Skip button */}
-      <button
-        type="button"
-        onClick={handleSkip}
-        disabled={!!loading}
-        className="btn btn-secondary btn-lg btn-full"
-        style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-      >
-        {loading === "skip" ? (
-          <><Loader2 size={18} className="spinner" /> {isSingleDevice ? "Continuing…" : "Skipping…"}</>
-        ) : (
-          <><SkipForward size={18} /> {isSingleDevice ? "Continue to Reveal" : "Skip — Go to Vote"}</>
-        )}
-      </button>
     </div>
   );
 }

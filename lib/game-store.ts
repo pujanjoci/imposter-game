@@ -373,26 +373,18 @@ export function submitGuess(
   if (!room.imposterIds.includes(playerId)) return { error: "Only an imposter can guess" };
 
   const trimmed = guess.trim();
-  if (!trimmed) return { error: "Guess cannot be empty" };
+  if (trimmed) {
+    room.imposterGuess = trimmed;
+    const correct = trimmed.toLowerCase() === (room.word || "").toLowerCase();
+    room.imposterGuessCorrect = correct;
+  }
 
-  room.imposterGuess = trimmed;
-  const correct = trimmed.toLowerCase() === room.word!.toLowerCase();
-  room.imposterGuessCorrect = correct;
+  // After guessing, proceed directly to voting phase
+  room.phase = room.singleDeviceMode ? "results" : "vote_phase";
 
-  if (correct) {
-    // Imposter guessed right → imposter wins immediately, skip voting
-    room.result = "imposter_wins";
-    room.resultReason = `The Imposter correctly guessed the secret word: "${room.word}"`;
-    room.phase = "results";
-  } else {
-    // Wrong guess → crewmates can now vote
-    room.phase = room.singleDeviceMode ? "results" : "vote_phase";
-    if (room.singleDeviceMode) {
-      // In single-device mode, wrong guess also means vote by picking a suspect
-      // We skip the vote phase and go directly to results with no winner yet
-      room.result = null;
-      room.resultReason = "The imposter guessed wrong. Time to vote!";
-    }
+  if (room.singleDeviceMode) {
+    room.result = null;
+    room.resultReason = null;
   }
 
   touch(room);
@@ -400,7 +392,7 @@ export function submitGuess(
   return null;
 }
 
-// Imposter chooses to skip guessing → go straight to vote phase
+// Proceed directly to vote phase
 export function skipGuess(
   code: string,
   playerId: string
@@ -409,14 +401,13 @@ export function skipGuess(
   if (!room) return { error: "Room not found" };
   if (room.phase !== "inter_round") return { error: "Wrong phase" };
   if (room.gameMode === "hidden_words") return { error: "Guessing is disabled in hidden word mode" };
-  if (!room.imposterIds.includes(playerId)) return { error: "Only an imposter can skip" };
+  if (!room.imposterIds.includes(playerId)) return { error: "Only an imposter can advance" };
 
   room.imposterGuess = null;
   room.imposterGuessCorrect = null;
   room.phase = room.singleDeviceMode ? "results" : "vote_phase";
 
   if (room.singleDeviceMode) {
-    // In single-device, skip guess → show results with option to reveal imposter
     room.result = null;
     room.resultReason = null;
   }
@@ -672,23 +663,4 @@ export function subscribe(
   return () => subscribers.get(code)?.delete(callback);
 }
 
-// ---------------------------------------------------------------------------
-// Cleanup stale rooms (inactive > 3 hours)
-// ---------------------------------------------------------------------------
-
-if (typeof setInterval !== "undefined") {
-  const cleanupInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [code, room] of rooms.entries()) {
-      const lastActivity = room.updatedAt || room.createdAt;
-      if (now - lastActivity > 3 * 60 * 60 * 1000) {
-        rooms.delete(code);
-        subscribers.delete(code);
-      }
-    }
-  }, 10 * 60 * 1000);
-
-  if (cleanupInterval.unref) {
-    cleanupInterval.unref();
-  }
-}
+// Room sessions remain persistent in memory without forced expiration

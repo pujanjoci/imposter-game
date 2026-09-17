@@ -236,21 +236,15 @@ export function submitLocalGuess(code: string, playerId: string, guess: string):
   if (!room.imposterIds.includes(playerId)) return { error: "Only the imposter can guess" };
 
   const trimmed = guess.trim();
-  if (!trimmed) return { error: "Guess cannot be empty" };
-
-  room.imposterGuess = trimmed;
-  const correct = trimmed.toLowerCase() === room.word!.toLowerCase();
-  room.imposterGuessCorrect = correct;
-
-  if (correct) {
-    room.result = "imposter_wins";
-    room.resultReason = `The Imposter correctly guessed the secret word: "${room.word}"`;
-    room.phase = "results";
-  } else {
-    room.phase = "results";
-    room.result = null;
-    room.resultReason = "The imposter guessed wrong! Time to vote out the suspect.";
+  if (trimmed) {
+    room.imposterGuess = trimmed;
+    const correct = trimmed.toLowerCase() === (room.word || "").toLowerCase();
+    room.imposterGuessCorrect = correct;
   }
+
+  room.phase = "results";
+  room.result = null;
+  room.resultReason = null;
 
   saveLocalRoomToStorage(room);
   broadcast(code);

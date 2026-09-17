@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRoomView } from "@/lib/game-store";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -10,7 +12,19 @@ export async function GET(
   const playerId = req.nextUrl.searchParams.get("playerId") || "";
   const view = getRoomView(code.toUpperCase(), playerId);
   if (!view) {
-    return NextResponse.json({ error: "Room not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Room not found" },
+      {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   }
-  return NextResponse.json(view);
+  return NextResponse.json(view, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+  });
 }

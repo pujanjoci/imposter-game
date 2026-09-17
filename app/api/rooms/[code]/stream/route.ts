@@ -19,7 +19,10 @@ export async function GET(
   if (!room) {
     return new Response(JSON.stringify({ error: "Room not found" }), {
       status: 404,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+      },
     });
   }
 
@@ -49,6 +52,14 @@ export async function GET(
         }
       };
 
+      // Instruct browser to reconnect every 1s on drops
+      try {
+        controller.enqueue(encoder.encode("retry: 1000\n\n"));
+      } catch {
+        cleanup();
+        return;
+      }
+
       // Helper: serialize the room view and enqueue it as an SSE event
       function send(r: Room) {
         if (isClosed) return;
@@ -62,13 +73,13 @@ export async function GET(
         }
       }
 
-      // Send the current state immediately on connect
+      // Send current state immediately on connect
       send(room);
 
       // Subscribe to future state changes
       unsub = subscribe(roomCode, send);
 
-      // Keep-alive ping every 15 s to prevent proxy/mobile timeouts
+      // Keep-alive ping every 15 s
       ping = setInterval(() => {
         if (isClosed) return;
         try {
@@ -78,20 +89,21 @@ export async function GET(
         }
       }, 15_000);
 
-      // Clean up when the client disconnects or aborts
+      // Clean up when client disconnects
       req.signal.addEventListener("abort", cleanup);
     },
     cancel() {
-      // ReadableStream cancelled by consumer
+      // ReadableStream cancelled
     },
   });
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform, no-store, must-revalidate",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
